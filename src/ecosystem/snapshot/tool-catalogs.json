@@ -1,0 +1,186 @@
+{
+  "quinn_invoices": [
+    {
+      "name": "create_invoice",
+      "description": "Create a new invoice for a customer",
+      "requires_approval": false,
+      "risk": "medium",
+      "approval_mode": "auto",
+      "receipted": true
+    },
+    {
+      "name": "send_invoice",
+      "description": "Send an invoice to the customer via email",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": true
+    },
+    {
+      "name": "void_invoice",
+      "description": "Void an existing invoice",
+      "requires_approval": true,
+      "risk": "high",
+      "approval_mode": "voice_confirm",
+      "receipted": true
+    },
+    {
+      "name": "apply_discount",
+      "description": "Apply a discount to an invoice",
+      "requires_approval": true,
+      "risk": "medium",
+      "approval_mode": "voice_confirm",
+      "receipted": true
+    },
+    {
+      "name": "mark_paid",
+      "description": "Mark an invoice as paid manually",
+      "requires_approval": true,
+      "risk": "high",
+      "approval_mode": "async_approval",
+      "receipted": true
+    },
+    {
+      "name": "list_invoices",
+      "description": "List all invoices with optional filters",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": false
+    }
+  ],
+  "eli_inbox": [
+    {
+      "name": "read_email",
+      "description": "Read and parse email content",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": false
+    },
+    {
+      "name": "categorize_email",
+      "description": "Categorize email by intent and priority",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": true
+    },
+    {
+      "name": "draft_reply",
+      "description": "Draft a reply to an email",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": true
+    },
+    {
+      "name": "send_reply",
+      "description": "Send a drafted reply",
+      "requires_approval": true,
+      "risk": "medium",
+      "approval_mode": "async_approval",
+      "receipted": true
+    },
+    {
+      "name": "archive_email",
+      "description": "Archive an email",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": true
+    },
+    {
+      "name": "flag_urgent",
+      "description": "Flag email as urgent for human review",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": true
+    }
+  ],
+  "sarah_front_desk": [
+    {
+      "name": "answer_call",
+      "description": "Answer incoming call with greeting",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": true
+    },
+    {
+      "name": "transfer_call",
+      "description": "Transfer call to another extension or staff",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": true
+    },
+    {
+      "name": "take_message",
+      "description": "Take a message from the caller",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": true
+    },
+    {
+      "name": "schedule_callback",
+      "description": "Schedule a callback for the caller",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": true
+    },
+    {
+      "name": "escalate_to_human",
+      "description": "Escalate call to human operator",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": true
+    }
+  ],
+  "nora-conference": [
+    {
+      "name": "start_conference",
+      "description": "Start a new conference call",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": true
+    },
+    {
+      "name": "add_participant",
+      "description": "Add a participant to the conference",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": true
+    },
+    {
+      "name": "start_recording",
+      "description": "Start recording the conference",
+      "requires_approval": true,
+      "risk": "medium",
+      "approval_mode": "voice_confirm",
+      "receipted": true
+    },
+    {
+      "name": "generate_transcript",
+      "description": "Generate transcript from recording",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": true
+    },
+    {
+      "name": "end_conference",
+      "description": "End the conference call",
+      "requires_approval": false,
+      "risk": "low",
+      "approval_mode": "auto",
+      "receipted": true
+    }
+  ]
+}

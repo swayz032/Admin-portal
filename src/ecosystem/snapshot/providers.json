@@ -1,0 +1,114 @@
+[
+  {
+    "provider_id": "stripe",
+    "name": "Stripe",
+    "lane": "payments",
+    "envs": ["development", "staging", "production"],
+    "capabilities": ["invoicing", "payments", "subscriptions", "refunds"],
+    "status": "connected"
+  },
+  {
+    "provider_id": "twilio",
+    "name": "Twilio",
+    "lane": "telephony",
+    "envs": ["development", "staging", "production"],
+    "capabilities": ["voice", "sms", "whatsapp", "verify", "sip_trunking"],
+    "status": "connected"
+  },
+  {
+    "provider_id": "openai",
+    "name": "OpenAI",
+    "lane": "ai",
+    "envs": ["development", "staging", "production"],
+    "capabilities": ["chat", "embeddings", "vision", "audio", "agents_sdk"],
+    "status": "connected"
+  },
+  {
+    "provider_id": "livekit",
+    "name": "LiveKit",
+    "lane": "realtime",
+    "envs": ["development", "staging", "production"],
+    "capabilities": ["webrtc", "sip_bridge", "agent_sessions", "video", "audio"],
+    "status": "connected"
+  },
+  {
+    "provider_id": "pandadoc",
+    "name": "PandaDoc",
+    "lane": "contracts",
+    "envs": ["production"],
+    "capabilities": ["document_generation", "esign", "templates", "signature_sends"],
+    "status": "connected"
+  },
+  {
+    "provider_id": "zoho",
+    "name": "Zoho Mail",
+    "lane": "email",
+    "envs": ["production"],
+    "capabilities": ["mailbox", "white_label_email", "imap", "smtp"],
+    "status": "connected"
+  },
+  {
+    "provider_id": "anam",
+    "name": "Anam",
+    "lane": "avatar",
+    "envs": ["production"],
+    "capabilities": ["avatar_rendering", "voice_synthesis", "realtime_presence"],
+    "status": "connected"
+  },
+  {
+    "provider_id": "elevenlabs",
+    "name": "ElevenLabs",
+    "lane": "tts",
+    "envs": ["development", "staging", "production"],
+    "capabilities": ["voice_cloning", "multilingual", "low_latency_tts"],
+    "status": "connected"
+  },
+  {
+    "provider_id": "deepgram",
+    "name": "Deepgram",
+    "lane": "stt",
+    "envs": ["development", "staging", "production"],
+    "capabilities": ["real_time_transcription", "speaker_diarization", "nova_3"],
+    "status": "connected"
+  },
+  {
+    "provider_id": "supabase",
+    "name": "Supabase",
+    "lane": "database",
+    "envs": ["development", "staging", "production"],
+    "capabilities": ["postgres", "auth", "storage", "edge_functions", "realtime"],
+    "status": "connected"
+  },
+  {
+    "provider_id": "qbo",
+    "name": "QuickBooks Online",
+    "lane": "accounting",
+    "envs": ["production"],
+    "capabilities": ["invoicing", "expenses", "reports", "bank_feeds"],
+    "status": "pending"
+  },
+  {
+    "provider_id": "plaid",
+    "name": "Plaid",
+    "lane": "banking",
+    "envs": ["development", "production"],
+    "capabilities": ["account_linking", "transactions", "balance", "identity"],
+    "status": "pending"
+  },
+  {
+    "provider_id": "google",
+    "name": "Google (Gmail + Calendar)",
+    "lane": "productivity",
+    "envs": ["production"],
+    "capabilities": ["gmail_oauth_send", "calendar", "business_search"],
+    "status": "connected"
+  },
+  {
+    "provider_id": "n8n",
+    "name": "n8n",
+    "lane": "automation",
+    "envs": ["production"],
+    "capabilities": ["webhooks", "retries", "timers", "batch_jobs"],
+    "status": "connected"
+  }
+]

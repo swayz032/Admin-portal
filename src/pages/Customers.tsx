@@ -1,0 +1,246 @@
+import { useState } from 'react';
+import { PageHero } from '@/components/shared/PageHero';
+import { QuickStats } from '@/components/shared/QuickStats';
+import { InsightPanel } from '@/components/shared/InsightPanel';
+import { Panel } from '@/components/shared/Panel';
+import { DataTable } from '@/components/shared/DataTable';
+import { StatusChip } from '@/components/shared/StatusChip';
+import { RiskBadge } from '@/components/shared/RiskBadge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Button } from '@/components/ui/button';
+import type { Customer } from '@/data/seed';
+import { useCustomers } from '@/hooks/useAdminData';
+import { PageLoadingState } from '@/components/shared/PageLoadingState';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { formatCurrency, formatTimeAgo } from '@/lib/formatters';
+import { Search, Users, TrendingUp, AlertTriangle, ChevronDown, Heart } from 'lucide-react';
+import { useSystem } from '@/contexts/SystemContext';
+import { ModeText } from '@/components/shared/ModeText';
+
+export default function Customers() {
+  const { viewMode } = useSystem();
+  const { data: customers, loading: customersLoading, error: customersError, refetch: refetchCustomers } = useCustomers();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+
+  if (customersLoading) return <PageLoadingState showKPIs rows={5} />;
+  if (customersError) return <EmptyState variant="error" title="Failed to load customers" description={customersError} actionLabel="Retry" onAction={refetchCustomers} />;
+
+  const filteredCustomers = customers.filter(c => {
+    const matchesSearch = searchTerm === '' || 
+      c.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  // Stats
+  const activeCustomers = customers.filter(c => c.status === 'Active').length;
+  const atRiskCustomers = customers.filter(c => c.status === 'At Risk').length;
+  const totalMRR = customers.reduce((sum, c) => sum + c.mrr, 0);
+
+  const quickStats = [
+    { label: 'active', value: activeCustomers, status: 'success' as const },
+    { label: 'at risk', value: atRiskCustomers, status: atRiskCustomers > 0 ? 'warning' as const : 'success' as const },
+    { label: 'total MRR', value: formatCurrency(totalMRR) },
+  ];
+
+  const getStatusType = (status: Customer['status']) => {
+    switch (status) {
+      case 'Active': return 'success';
+      case 'Trial': return 'pending';
+      case 'Paused': return 'neutral';
+      case 'At Risk': return 'critical';
+      default: return 'neutral';
+    }
+  };
+
+  const getOperatorStatus = (status: Customer['status']) => {
+    switch (status) {
+      case 'Active': return 'Active';
+      case 'Trial': return 'Trying Out';
+      case 'Paused': return 'On Hold';
+      case 'At Risk': return 'Needs Attention';
+      default: return status;
+    }
+  };
+
+  // Columns
+  const columns = viewMode === 'operator' ? [
+    { key: 'name', header: 'Customer' },
+    { 
+      key: 'status', 
+      header: 'Status', 
+      render: (c: Customer) => <StatusChip status={getStatusType(c.status)} label={getOperatorStatus(c.status)} /> 
+    },
+    { key: 'plan', header: 'Plan' },
+    { key: 'mrr', header: 'Monthly Revenue', render: (c: Customer) => formatCurrency(c.mrr) },
+    { key: 'riskFlag', header: 'Health', render: (c: Customer) => {
+      if (c.riskFlag === 'None') return <span className="text-success text-sm">Good</span>;
+      if (c.riskFlag === 'Low') return <span className="text-warning text-sm">Fair</span>;
+      return <span className="text-destructive text-sm">Attention</span>;
+    }},
+  ] : [
+    { key: 'name', header: 'Customer' },
+    { 
+      key: 'status', 
+      header: 'Status', 
+      render: (c: Customer) => <StatusChip status={getStatusType(c.status)} label={c.status} /> 
+    },
+    { key: 'plan', header: 'Plan' },
+    { key: 'mrr', header: 'MRR', render: (c: Customer) => formatCurrency(c.mrr) },
+    { key: 'riskFlag', header: 'Risk', render: (c: Customer) => <RiskBadge risk={c.riskFlag} /> },
+    { key: 'openIncidents', header: 'Incidents', render: (c: Customer) => c.openIncidents > 0 ? <span className="text-warning">{c.openIncidents}</span> : '0' },
+    { key: 'lastActivity', header: 'Last Activity', render: (c: Customer) => <span className="text-muted-foreground">{formatTimeAgo(c.lastActivity)}</span> },
+  ];
+
+  return (
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Hero Section */}
+      <PageHero
+        title={viewMode === 'operator' 
+          ? `${activeCustomers} active customers generating ${formatCurrency(totalMRR)}/month`
+          : `${customers.length} customers tracked`}
+        subtitle={viewMode === 'operator' 
+          ? "View customer accounts and how they're doing" 
+          : "Manage customer accounts and monitor health"}
+        icon={<Users className="h-6 w-6" />}
+        status={atRiskCustomers === 0 
+          ? { type: 'success', label: 'All healthy' }
+          : { type: 'warning', label: `${atRiskCustomers} at risk` }}
+      />
+
+      {/* Quick Stats */}
+      <QuickStats stats={quickStats} />
+
+      {/* Story Insights */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <InsightPanel
+          headline={atRiskCustomers === 0 ? "All customers healthy" : `${atRiskCustomers} need attention`}
+          subtext={atRiskCustomers === 0 ? "No customers at risk" : "Review at-risk customers below"}
+          trend={atRiskCustomers === 0 ? 'positive' : 'negative'}
+          icon={<Heart className="h-5 w-5" />}
+        />
+        <InsightPanel
+          headline={`${formatCurrency(totalMRR)} monthly revenue`}
+          subtext={`From ${activeCustomers} active customers`}
+          trend="positive"
+          icon={<TrendingUp className="h-5 w-5" />}
+          linkTo="/subscriptions"
+          linkLabel="View revenue details"
+        />
+        <InsightPanel
+          headline={`${customers.filter(c => c.status === 'Trial').length} in trial`}
+          subtext="Potential new customers"
+          trend="neutral"
+          icon={<Users className="h-5 w-5" />}
+        />
+      </div>
+
+      {/* Search and Filters */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search customers..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 bg-card border-border"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px] bg-card border-border">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent className="bg-card border-border">
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="Active">{viewMode === 'operator' ? 'Active' : 'Active'}</SelectItem>
+            <SelectItem value="Trial">{viewMode === 'operator' ? 'Trying Out' : 'Trial'}</SelectItem>
+            <SelectItem value="Paused">{viewMode === 'operator' ? 'On Hold' : 'Paused'}</SelectItem>
+            <SelectItem value="At Risk">{viewMode === 'operator' ? 'Needs Attention' : 'At Risk'}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Customers Table */}
+      <Panel title={viewMode === 'operator' ? "All Customers" : "Customer List"} noPadding>
+        <DataTable
+          columns={columns}
+          data={filteredCustomers}
+          keyExtractor={(c: Customer) => c.id}
+          onRowClick={(c) => setSelectedCustomer(c)}
+          emptyMessage={viewMode === 'operator' ? "No customers found." : "No customers match the current filters."}
+        />
+      </Panel>
+
+      {/* Customer Detail Dialog */}
+      <Dialog open={!!selectedCustomer} onOpenChange={() => setSelectedCustomer(null)}>
+        <DialogContent className="bg-card border-border max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">
+              {selectedCustomer?.name}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedCustomer && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <StatusChip 
+                  status={getStatusType(selectedCustomer.status)} 
+                  label={viewMode === 'operator' ? getOperatorStatus(selectedCustomer.status) : selectedCustomer.status} 
+                />
+                <span className="text-sm text-muted-foreground">{selectedCustomer.plan}</span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                  <p className="text-xs text-muted-foreground">{viewMode === 'operator' ? 'Monthly Revenue' : 'MRR'}</p>
+                  <p className="text-lg font-semibold text-primary">{formatCurrency(selectedCustomer.mrr)}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                  <p className="text-xs text-muted-foreground">{viewMode === 'operator' ? 'Health' : 'Risk Flag'}</p>
+                  <div className="mt-1">
+                    {viewMode === 'operator' ? (
+                      selectedCustomer.riskFlag === 'None' 
+                        ? <span className="text-success font-medium">Good</span>
+                        : selectedCustomer.riskFlag === 'Low'
+                        ? <span className="text-warning font-medium">Fair</span>
+                        : <span className="text-destructive font-medium">Needs Attention</span>
+                    ) : (
+                      <RiskBadge risk={selectedCustomer.riskFlag} />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                  <p className="text-xs text-muted-foreground">{viewMode === 'operator' ? 'Open Issues' : 'Open Incidents'}</p>
+                  <p className={`text-lg font-semibold ${selectedCustomer.openIncidents > 0 ? 'text-warning' : ''}`}>
+                    {selectedCustomer.openIncidents}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                  <p className="text-xs text-muted-foreground">{viewMode === 'operator' ? 'Last Active' : 'Last Activity'}</p>
+                  <p className="text-sm">{formatTimeAgo(selectedCustomer.lastActivity)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedCustomer(null)}>
+              Close
+            </Button>
+            <Button asChild>
+              <a href={`/incidents?customer=${selectedCustomer?.name}`}>View Issues</a>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

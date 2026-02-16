@@ -1,0 +1,185 @@
+[
+  {
+    "tool_id": "deepgram_flux_stt",
+    "name": "Deepgram Nova-3 STT",
+    "category": "stt",
+    "provider": "deepgram",
+    "requires_secrets": ["DEEPGRAM_API_KEY"],
+    "capabilities": ["real_time_transcription", "speaker_diarization", "punctuation"],
+    "description": "Real-time speech-to-text with high accuracy and low latency. $0.0092/min.",
+    "unit_cost": 0.0092,
+    "unit": "minute"
+  },
+  {
+    "tool_id": "elevenlabs_flash_tts",
+    "name": "ElevenLabs Flash v2.5 TTS",
+    "category": "tts",
+    "provider": "elevenlabs",
+    "requires_secrets": ["ELEVENLABS_API_KEY"],
+    "capabilities": ["voice_cloning", "multilingual", "low_latency"],
+    "description": "High-quality text-to-speech with natural voice synthesis. $0.09/min.",
+    "unit_cost": 0.09,
+    "unit": "minute"
+  },
+  {
+    "tool_id": "brave_search",
+    "name": "Brave Search",
+    "category": "search",
+    "provider": "brave",
+    "requires_secrets": ["BRAVE_API_KEY"],
+    "capabilities": ["web_search", "news_search", "image_search"],
+    "description": "Privacy-focused web search API for research operations."
+  },
+  {
+    "tool_id": "tavily_search",
+    "name": "Tavily Search",
+    "category": "search",
+    "provider": "tavily",
+    "requires_secrets": ["TAVILY_API_KEY"],
+    "capabilities": ["ai_search", "summarization", "fact_extraction"],
+    "description": "AI-optimized search with automatic summarization."
+  },
+  {
+    "tool_id": "pdf_preflight",
+    "name": "PDF Preflight",
+    "category": "document",
+    "provider": "internal",
+    "requires_secrets": [],
+    "capabilities": ["pdf_validation", "page_count", "text_extraction"],
+    "description": "Validates and extracts metadata from PDF documents."
+  },
+  {
+    "tool_id": "playwright_pdf_renderer",
+    "name": "Playwright PDF Renderer",
+    "category": "document",
+    "provider": "internal",
+    "requires_secrets": [],
+    "capabilities": ["html_to_pdf", "screenshot", "page_rendering"],
+    "description": "Renders HTML to PDF using headless browser."
+  },
+  {
+    "tool_id": "stripe_invoicing",
+    "name": "Stripe Invoicing",
+    "category": "payment",
+    "provider": "stripe",
+    "requires_secrets": ["STRIPE_SECRET_KEY"],
+    "capabilities": ["create_invoice", "send_invoice", "void_invoice", "list_invoices"],
+    "description": "Create and manage invoices via Stripe."
+  },
+  {
+    "tool_id": "gmail_send",
+    "name": "Gmail Send",
+    "category": "communication",
+    "provider": "google",
+    "requires_secrets": ["GOOGLE_OAUTH_TOKEN"],
+    "capabilities": ["send_email", "draft_email", "reply_email"],
+    "description": "Send and manage emails via Gmail API (OAuth send support)."
+  },
+  {
+    "tool_id": "gmail_read",
+    "name": "Gmail Read",
+    "category": "communication",
+    "provider": "google",
+    "requires_secrets": ["GOOGLE_OAUTH_TOKEN"],
+    "capabilities": ["read_email", "list_emails", "search_emails"],
+    "description": "Read and search emails via Gmail API."
+  },
+  {
+    "tool_id": "zoho_mail",
+    "name": "Zoho Mail",
+    "category": "communication",
+    "provider": "zoho",
+    "requires_secrets": ["ZOHO_OAUTH_TOKEN"],
+    "capabilities": ["send_email", "read_email", "white_label_domain"],
+    "description": "White-labeled business mailbox service. $4/seat/mo baseline."
+  },
+  {
+    "tool_id": "calendar_create",
+    "name": "Calendar Create Event",
+    "category": "calendar",
+    "provider": "google",
+    "requires_secrets": ["GOOGLE_OAUTH_TOKEN"],
+    "capabilities": ["create_event", "update_event", "delete_event"],
+    "description": "Create and manage calendar events."
+  },
+  {
+    "tool_id": "livekit_voice",
+    "name": "LiveKit Voice Session",
+    "category": "realtime",
+    "provider": "livekit",
+    "requires_secrets": ["LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"],
+    "capabilities": ["voice_session", "sip_bridge", "agent_session"],
+    "description": "Real-time voice sessions via WebRTC. SIP bridge for telephony integration.",
+    "unit_cost": 0.014,
+    "unit": "minute"
+  },
+  {
+    "tool_id": "livekit_video",
+    "name": "LiveKit Video Session",
+    "category": "realtime",
+    "provider": "livekit",
+    "requires_secrets": ["LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"],
+    "capabilities": ["video_session", "screen_share", "recording"],
+    "description": "Real-time video sessions for Video with Ava authority desk."
+  },
+  {
+    "tool_id": "pandadoc_contracts",
+    "name": "PandaDoc Contracts",
+    "category": "contracts",
+    "provider": "pandadoc",
+    "requires_secrets": ["PANDADOC_API_KEY"],
+    "capabilities": ["template_selection", "variable_collection", "esign", "signature_send"],
+    "description": "Document generation + eSign. 12 signature sends/owner/month included.",
+    "unit_cost": 0.0,
+    "unit": "included",
+    "quota": 12,
+    "overage_rate": 10.0
+  },
+  {
+    "tool_id": "anam_avatar",
+    "name": "Anam Avatar",
+    "category": "avatar",
+    "provider": "anam",
+    "requires_secrets": ["ANAM_API_KEY"],
+    "capabilities": ["avatar_rendering", "voice_synthesis", "realtime_presence"],
+    "description": "Human-like avatar presence for 1-on-1 Video with Ava sessions. $0.04/min.",
+    "unit_cost": 0.04,
+    "unit": "minute"
+  },
+  {
+    "tool_id": "twilio_voice",
+    "name": "Twilio Voice",
+    "category": "telephony",
+    "provider": "twilio",
+    "requires_secrets": ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"],
+    "capabilities": ["inbound_calls", "outbound_calls", "sip_origination", "sip_termination"],
+    "description": "Telephony for AI receptionist. $0.575/number/mo + per-minute rates."
+  },
+  {
+    "tool_id": "twilio_sms",
+    "name": "Twilio SMS",
+    "category": "messaging",
+    "provider": "twilio",
+    "requires_secrets": ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"],
+    "capabilities": ["send_sms", "receive_sms", "10dlc"],
+    "description": "SMS messaging for notifications and caller summaries. $0.0083/segment."
+  },
+  {
+    "tool_id": "whatsapp_cloud",
+    "name": "WhatsApp Cloud API",
+    "category": "messaging",
+    "provider": "meta",
+    "requires_secrets": ["WHATSAPP_TOKEN"],
+    "capabilities": ["send_message", "receive_message", "templates"],
+    "description": "Meta Cloud API direct for owner-approved business communications."
+  },
+  {
+    "tool_id": "business_google_search",
+    "name": "Business Google Search",
+    "category": "search",
+    "provider": "google",
+    "requires_secrets": ["GOOGLE_SEARCH_API_KEY"],
+    "capabilities": ["web_search", "vendor_comparison", "compliance_checks"],
+    "description": "In-session web research for Video with Ava. Up to 20 searches/session."
+  }
+]

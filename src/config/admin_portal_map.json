@@ -1,0 +1,172 @@
+{
+  "generated_at": "2026-02-12",
+  "source": {
+    "app_routes_from": "import-my-portal-main/src/App.tsx",
+    "sidebar_nav_from": "import-my-portal-main/src/components/layout/Sidebar.tsx"
+  },
+  "view_modes": [
+    "operator",
+    "engineer"
+  ],
+  "routes_declared": [
+    "/auth",
+    "/",
+    "/home",
+    "/dashboard",
+    "/approvals",
+    "/activity",
+    "/safety",
+    "/incidents",
+    "/customers",
+    "/subscriptions",
+    "/connected-apps",
+    "/advanced",
+    "/llm-ops-desk",
+    "/automation",
+    "/receipts",
+    "/outbox",
+    "/provider-call-log",
+    "/business/runway-burn",
+    "/business/costs-usage",
+    "/business/revenue-addons",
+    "/business/acquisition-analytics",
+    "/skill-packs/registry",
+    "/skill-packs/analytics",
+    "/agent-studio",
+    "/staff-config",
+    "/control-plane/registry",
+    "/control-plane/builder",
+    "/control-plane/rollouts",
+    "*"
+  ],
+  "nav": {
+    "core": [
+      {
+        "to": "/home",
+        "label": "Home",
+        "engineerLabel": null,
+        "icon": "Home"
+      },
+      {
+        "to": "/approvals",
+        "label": "Authority Queue",
+        "engineerLabel": "Authority Queue",
+        "icon": "CheckCircle"
+      },
+      {
+        "to": "/receipts",
+        "label": "Proof Log",
+        "engineerLabel": "Receipts",
+        "icon": "Receipt"
+      },
+      {
+        "to": "/activity",
+        "label": "Activity Log",
+        "engineerLabel": null,
+        "icon": "Activity"
+      },
+      {
+        "to": "/outbox",
+        "label": "Task Queue",
+        "engineerLabel": "Outbox",
+        "icon": "Inbox"
+      },
+      {
+        "to": "/safety",
+        "label": "Safety Mode",
+        "engineerLabel": null,
+        "icon": "Shield"
+      },
+      {
+        "to": "/incidents",
+        "label": "Incidents",
+        "engineerLabel": null,
+        "icon": "AlertTriangle"
+      },
+      {
+        "to": "/automation",
+        "label": "Automation",
+        "engineerLabel": null,
+        "icon": "Zap"
+      },
+      {
+        "to": "/connected-apps",
+        "label": "Connected Services",
+        "engineerLabel": "Provider Control",
+        "icon": "Plug"
+      },
+      {
+        "to": "/provider-call-log",
+        "label": "Service Calls",
+        "engineerLabel": "Provider Logs",
+        "icon": "Server"
+      },
+      {
+        "to": "/customers",
+        "label": "Customers",
+        "engineerLabel": null,
+        "icon": "Users"
+      },
+      {
+        "to": "/subscriptions",
+        "label": "Subscriptions & Sales",
+        "engineerLabel": null,
+        "icon": "CreditCard"
+      },
+      {
+        "to": "/advanced",
+        "label": "Advanced",
+        "engineerLabel": null,
+        "icon": "Settings"
+      }
+    ],
+    "business": [
+      {
+        "to": "/business/runway-burn",
+        "label": "Runway & Burn",
+        "engineerLabel": null,
+        "icon": "Wallet"
+      },
+      {
+        "to": "/business/costs-usage",
+        "label": "Costs & Usage",
+        "engineerLabel": null,
+        "icon": "Receipt"
+      },
+      {
+        "to": "/business/revenue-addons",
+        "label": "Revenue & Add-ons",
+        "engineerLabel": null,
+        "icon": "TrendingUp"
+      },
+      {
+        "to": "/business/acquisition-analytics",
+        "label": "Acquisition Analytics",
+        "engineerLabel": null,
+        "icon": "BarChart3"
+      }
+    ],
+    "skill_packs": [
+      {
+        "to": "/skill-packs/registry",
+        "label": "Registry",
+        "engineerLabel": null,
+        "icon": "Package"
+      },
+      {
+        "to": "/skill-packs/analytics",
+        "label": "Analytics",
+        "engineerLabel": null,
+        "icon": "Cpu"
+      }
+    ],
+    "control_plane": [
+      {
+        "to": "/agent-studio",
+        "label": "Agent Studio",
+        "engineerLabel": "Agent Studio",
+        "icon": "Bot"
+      }
+    ]
+  }
+}

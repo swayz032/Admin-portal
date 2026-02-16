@@ -1,0 +1,279 @@
+[
+  {
+    "staff_id": "ava",
+    "enabled": true,
+    "thresholds": {},
+    "approval_rules": [
+      {
+        "action_type": "delegate_task",
+        "requires_approval": false,
+        "approval_mode": "auto"
+      },
+      {
+        "action_type": "escalate_incident",
+        "requires_approval": false,
+        "approval_mode": "auto"
+      }
+    ],
+    "tool_policy": {
+      "allowlist": ["*"],
+      "denylist": [],
+      "require_receipts": true
+    },
+    "provider_bindings": [],
+    "rollout_state": "active",
+    "updated_at": "2024-01-15T10:00:00Z",
+    "updated_by": "system"
+  },
+  {
+    "staff_id": "sarah",
+    "enabled": true,
+    "thresholds": {
+      "max_questions_before_escalate": 3,
+      "escalation_timing_seconds": 120
+    },
+    "approval_rules": [
+      {
+        "action_type": "transfer_call",
+        "requires_approval": false,
+        "approval_mode": "auto"
+      },
+      {
+        "action_type": "take_message",
+        "requires_approval": false,
+        "approval_mode": "auto"
+      }
+    ],
+    "tool_policy": {
+      "allowlist": ["answer_call", "transfer_call", "take_message", "schedule_callback", "escalate_to_human"],
+      "denylist": [],
+      "require_receipts": true
+    },
+    "provider_bindings": [
+      {
+        "provider_id": "twilio",
+        "enabled": true,
+        "connection_status": "connected",
+        "scopes": ["voice", "sms"]
+      }
+    ],
+    "rollout_state": "active",
+    "updated_at": "2024-01-15T10:00:00Z",
+    "updated_by": "admin@company.com"
+  },
+  {
+    "staff_id": "eli",
+    "enabled": true,
+    "thresholds": {},
+    "approval_rules": [
+      {
+        "action_type": "send_reply",
+        "requires_approval": true,
+        "approval_mode": "async_approval"
+      },
+      {
+        "action_type": "archive_email",
+        "requires_approval": false,
+        "approval_mode": "auto"
+      }
+    ],
+    "tool_policy": {
+      "allowlist": ["read_email", "categorize_email", "draft_reply", "send_reply", "archive_email", "flag_urgent"],
+      "denylist": [],
+      "require_receipts": true
+    },
+    "provider_bindings": [
+      {
+        "provider_id": "openai",
+        "enabled": true,
+        "connection_status": "connected",
+        "scopes": ["chat"]
+      }
+    ],
+    "rollout_state": "active",
+    "updated_at": "2024-01-14T15:30:00Z",
+    "updated_by": "admin@company.com"
+  },
+  {
+    "staff_id": "quinn",
+    "enabled": true,
+    "thresholds": {
+      "invoice_amount_threshold": 5000,
+      "auto_send_below": 1000
+    },
+    "approval_rules": [
+      {
+        "action_type": "create_invoice",
+        "requires_approval": false,
+        "approval_mode": "auto"
+      },
+      {
+        "action_type": "void_invoice",
+        "requires_approval": true,
+        "approval_mode": "voice_confirm"
+      },
+      {
+        "action_type": "apply_discount",
+        "requires_approval": true,
+        "approval_mode": "voice_confirm",
+        "threshold": 500,
+        "threshold_unit": "USD"
+      },
+      {
+        "action_type": "mark_paid",
+        "requires_approval": true,
+        "approval_mode": "async_approval"
+      }
+    ],
+    "tool_policy": {
+      "allowlist": ["create_invoice", "send_invoice", "void_invoice", "apply_discount", "mark_paid", "list_invoices"],
+      "denylist": [],
+      "require_receipts": true
+    },
+    "provider_bindings": [
+      {
+        "provider_id": "stripe",
+        "enabled": true,
+        "connection_status": "connected",
+        "scopes": ["invoicing", "payments"]
+      },
+      {
+        "provider_id": "qbo",
+        "enabled": true,
+        "connection_status": "connected",
+        "scopes": ["invoicing"]
+      }
+    ],
+    "rollout_state": "active",
+    "updated_at": "2024-01-15T09:00:00Z",
+    "updated_by": "admin@company.com"
+  },
+  {
+    "staff_id": "nora",
+    "enabled": true,
+    "thresholds": {
+      "max_participants": 10,
+      "retention_days": 30
+    },
+    "approval_rules": [
+      {
+        "action_type": "start_recording",
+        "requires_approval": true,
+        "approval_mode": "voice_confirm"
+      }
+    ],
+    "tool_policy": {
+      "allowlist": ["start_conference", "add_participant", "start_recording", "generate_transcript", "end_conference"],
+      "denylist": [],
+      "require_receipts": true
+    },
+    "provider_bindings": [
+      {
+        "provider_id": "twilio",
+        "enabled": true,
+        "connection_status": "connected",
+        "scopes": ["voice", "video"]
+      }
+    ],
+    "rollout_state": "active",
+    "updated_at": "2024-01-13T12:00:00Z",
+    "updated_by": "admin@company.com"
+  },
+  {
+    "staff_id": "adam",
+    "enabled": true,
+    "thresholds": {},
+    "approval_rules": [],
+    "tool_policy": {
+      "allowlist": ["brave_search", "tavily_search", "pdf_preflight"],
+      "denylist": [],
+      "require_receipts": true
+    },
+    "provider_bindings": [
+      {
+        "provider_id": "openai",
+        "enabled": true,
+        "connection_status": "connected",
+        "scopes": ["chat", "embeddings"]
+      }
+    ],
+    "rollout_state": "active",
+    "updated_at": "2024-01-12T08:00:00Z",
+    "updated_by": "admin@company.com"
+  },
+  {
+    "staff_id": "tec",
+    "enabled": true,
+    "thresholds": {},
+    "approval_rules": [],
+    "tool_policy": {
+      "allowlist": ["pdf_preflight", "playwright_pdf_renderer"],
+      "denylist": [],
+      "require_receipts": true
+    },
+    "provider_bindings": [],
+    "rollout_state": "active",
+    "updated_at": "2024-01-11T14:00:00Z",
+    "updated_by": "admin@company.com"
+  },
+  {
+    "staff_id": "finn",
+    "enabled": false,
+    "thresholds": {
+      "variance_alert_threshold": 10
+    },
+    "approval_rules": [],
+    "tool_policy": {
+      "allowlist": [],
+      "denylist": [],
+      "require_receipts": true
+    },
+    "provider_bindings": [
+      {
+        "provider_id": "plaid",
+        "enabled": false,
+        "connection_status": "pending",
+        "scopes": ["transactions", "balance"]
+      }
+    ],
+    "rollout_state": "draft",
+    "updated_at": "2024-01-10T10:00:00Z",
+    "updated_by": "admin@company.com"
+  },
+  {
+    "staff_id": "milo",
+    "enabled": false,
+    "thresholds": {},
+    "approval_rules": [],
+    "tool_policy": {
+      "allowlist": [],
+      "denylist": [],
+      "require_receipts": true
+    },
+    "provider_bindings": [],
+    "rollout_state": "draft",
+    "updated_at": "2024-01-09T16:00:00Z",
+    "updated_by": "admin@company.com"
+  },
+  {
+    "staff_id": "teressa",
+    "enabled": false,
+    "thresholds": {},
+    "approval_rules": [
+      {
+        "action_type": "*",
+        "requires_approval": true,
+        "approval_mode": "async_approval"
+      }
+    ],
+    "tool_policy": {
+      "allowlist": ["pdf_preflight"],
+      "denylist": [],
+      "require_receipts": true
+    },
+    "provider_bindings": [],
+    "rollout_state": "draft",
+    "updated_at": "2024-01-08T11:00:00Z",
+    "updated_by": "admin@company.com"
+  }
+]
