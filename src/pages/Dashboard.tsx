@@ -86,7 +86,6 @@ export default function Dashboard() {
 
   const handleApprovalDecision = () => {
     // TODO: Wire to Supabase approval_events insert + refetch
-    console.log('Decision:', approvalDialog?.action, 'Reason:', decisionReason);
     setApprovalDialog(null);
     setDecisionReason('');
     refetchApprovals();

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Session } from '@supabase/supabase-js';
+import { devLog, devWarn, devError } from '@/lib/devLog';
 
 // --- Security Constants ---
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;    // 30 minutes — auto-logout
@@ -71,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (error || !data?.user) {
-        console.warn('auth-session error:', error);
+        devWarn('auth-session error:', error);
         clearAuthState();
         return null;
       }
@@ -81,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setMfaRequired(info.mfaEnabled && !info.mfaVerified);
       return info;
     } catch (err) {
-      console.warn('auth-session fetch failed:', err);
+      devWarn('auth-session fetch failed:', err);
       clearAuthState();
       return null;
     }
@@ -98,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearAuthState();
       }
     } catch (err) {
-      console.warn('refreshSession failed:', err);
+      devWarn('refreshSession failed:', err);
       clearAuthState();
     }
   }, [fetchSessionInfo, clearAuthState]);
@@ -108,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await supabase.auth.signOut();
     } catch (err) {
-      console.warn('signOut error:', err);
+      devWarn('signOut error:', err);
     }
     clearAuthState();
   }, [clearAuthState]);
@@ -120,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // --- Force Logout (for security-critical scenarios) ---
   const forceLogout = useCallback(async (reason?: string) => {
-    console.warn('Force logout triggered:', reason || 'unspecified');
+    devWarn('Force logout triggered:', reason || 'unspecified');
     try {
       // Log the forced logout for audit trail
       await supabase.from('audit_log').insert({
@@ -143,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) {
         // If email provider is disabled, use the admin-sign-in edge function fallback
         if (error.message.includes('Email logins are disabled')) {
-          console.log('Email provider disabled, trying admin-sign-in fallback...');
+          devLog('Email provider disabled, trying admin-sign-in fallback...');
           const { data: fallbackData, error: fallbackError } = await supabase.functions.invoke('admin-sign-in', {
             body: { email, password },
           });
@@ -163,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               type: 'magiclink',
             });
             if (verifyError) {
-              console.error('verifyOtp error:', verifyError);
+              devError('verifyOtp error:', verifyError);
               return { error: { message: verifyError.message || 'Session creation failed' } };
             }
             // Reset activity timestamp on successful login
@@ -193,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: null };
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred.';
-      console.error('signIn error:', err);
+      devError('signIn error:', err);
       return { error: { message: errorMessage } };
     }
   }, []);
@@ -205,7 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(s);
         if (s?.access_token) {
           setTimeout(() => {
-            fetchSessionInfo(s.access_token).catch(console.warn).finally(() => setLoading(false));
+            fetchSessionInfo(s.access_token).catch(devWarn).finally(() => setLoading(false));
           }, 0);
         } else {
           clearAuthState();
@@ -217,7 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       if (s?.access_token) {
-        fetchSessionInfo(s.access_token).catch(console.warn).finally(() => setLoading(false));
+        fetchSessionInfo(s.access_token).catch(devWarn).finally(() => setLoading(false));
       } else {
         setLoading(false);
       }
@@ -247,7 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const interval = setInterval(() => {
       if (Date.now() - lastActivity > INACTIVITY_TIMEOUT_MS) {
-        console.warn('Inactivity timeout reached. Logging out.');
+        devWarn('Inactivity timeout reached. Logging out.');
         signOutRef.current();
       }
     }, INACTIVITY_CHECK_INTERVAL_MS);
@@ -261,7 +262,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const interval = setInterval(() => {
       fetchSessionInfo(session.access_token).catch(() => {
-        console.warn('Session heartbeat failed. Forcing logout.');
+        devWarn('Session heartbeat failed. Forcing logout.');
         signOutRef.current();
       });
     }, SESSION_CHECK_INTERVAL_MS);
@@ -279,7 +280,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Tab became visible again — check how long it was hidden
         const hiddenAt = tabHiddenAtRef.current;
         if (hiddenAt && Date.now() - hiddenAt > TAB_HIDDEN_TIMEOUT_MS) {
-          console.warn('Tab was hidden for >15 minutes. Forcing re-authentication.');
+          devWarn('Tab was hidden for >15 minutes. Forcing re-authentication.');
           signOutRef.current();
         }
         tabHiddenAtRef.current = null;

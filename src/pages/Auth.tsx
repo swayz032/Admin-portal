@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { devWarn } from '@/lib/devLog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -116,7 +117,7 @@ async function handleForgotPassword(email: string): Promise<{ success: boolean; 
     });
     if (error) {
       // Never reveal if the email exists — always show the same message
-      console.warn('Password reset error:', error.message);
+      devWarn('Password reset error:', error.message);
     }
     // Always show the same success message regardless of whether email exists
     return {

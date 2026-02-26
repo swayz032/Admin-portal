@@ -1,9 +1,11 @@
 /**
  * TERMINOLOGY DICTIONARY
- * 
+ *
  * Centralized dictionary for Operator/Engineer mode text switching.
  * Operator mode uses plain English; Engineer mode uses canonical terms.
  */
+
+import { devWarn } from '@/lib/devLog';
 
 export type ViewMode = 'operator' | 'engineer';
 
@@ -207,7 +209,7 @@ const GLOSSARY: Record<string, { operator: GlossaryEntry; engineer: GlossaryEntr
 export function getTerm(key: string, mode: ViewMode): string {
   const entry = TERMINOLOGY[key];
   if (!entry) {
-    console.warn(`Missing terminology key: ${key}`);
+    devWarn(`Missing terminology key: ${key}`);
     return key;
   }
   return entry[mode];
@@ -219,7 +221,7 @@ export function getTerm(key: string, mode: ViewMode): string {
 export function getGlossaryEntry(key: string, mode: ViewMode): GlossaryEntry | null {
   const entry = GLOSSARY[key];
   if (!entry) {
-    console.warn(`Missing glossary key: ${key}`);
+    devWarn(`Missing glossary key: ${key}`);
     return null;
   }
   return entry[mode];

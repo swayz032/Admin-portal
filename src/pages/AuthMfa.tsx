@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { devError } from '@/lib/devLog';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
@@ -124,7 +125,7 @@ export default function AuthMfa() {
       setEnrollFactorId(enrollData.id);
       setStep('enroll');
     } catch (err: any) {
-      console.error('MFA detect error:', err);
+      devError('MFA detect error:', err);
       setError(err?.message || 'Failed to initialize MFA.');
       setStep('verify'); // fallback
     }
@@ -159,7 +160,7 @@ export default function AuthMfa() {
       setVerifyFactorId('');
       setStep('enroll');
     } catch (err: any) {
-      console.error('MFA reset error:', err);
+      devError('MFA reset error:', err);
       setError(err?.message || 'Failed to reset MFA. Please try again.');
       setStep('verify');
     }

@@ -9,6 +9,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { devWarn } from '@/lib/devLog';
 
 // Re-export types from seed files for backwards compatibility with pages
 // Pages import types from here or from @/data/seed — both work
@@ -324,7 +325,7 @@ export async function fetchCustomers(filters?: {
 
   if (error) {
     // If suite_profiles doesn't exist or RLS denies, try admin view
-    console.warn('suite_profiles query failed, admin RLS policy may be needed:', error.message);
+    devWarn('suite_profiles query failed, admin RLS policy may be needed:', error.message);
     return { data: [], count: 0, page, pageSize };
   }
 
@@ -388,7 +389,7 @@ export async function fetchSubscriptions(filters?: {
 
   const { data, error, count } = await query;
   if (error) {
-    console.warn('Subscriptions query failed:', error.message);
+    devWarn('Subscriptions query failed:', error.message);
     return { data: [], count: 0, page, pageSize };
   }
 
@@ -435,7 +436,7 @@ export async function fetchProviders(): Promise<PaginatedResult<Provider>> {
     .order('created_at', { ascending: false });
 
   if (connError) {
-    console.warn('finance_connections query failed:', connError.message);
+    devWarn('finance_connections query failed:', connError.message);
   }
 
   // Fetch recent provider call stats (last 24h)
@@ -446,7 +447,7 @@ export async function fetchProviders(): Promise<PaginatedResult<Provider>> {
     .gte('started_at', since);
 
   if (callError) {
-    console.warn('provider_call_log query failed:', callError.message);
+    devWarn('provider_call_log query failed:', callError.message);
   }
 
   // Aggregate call stats by provider
@@ -583,7 +584,7 @@ export async function fetchBusinessMetrics(): Promise<BusinessMetrics> {
     .select('status, mrr, plan, created_at');
 
   if (suitesErr) {
-    console.warn('Business metrics query failed:', suitesErr.message);
+    devWarn('Business metrics query failed:', suitesErr.message);
     return getEmptyBusinessMetrics();
   }
 
@@ -785,7 +786,7 @@ export async function fetchAutomationFailures(filters?: {
     .range(from, to);
 
   if (error) {
-    console.warn('Dead letters query failed:', error.message);
+    devWarn('Dead letters query failed:', error.message);
     return { data: [], count: 0, page, pageSize };
   }
 
@@ -830,7 +831,7 @@ export async function fetchAutomationMetrics(): Promise<AutomationMetricsData> {
     .select('status, attempts, created_at, started_at, finished_at');
 
   if (error) {
-    console.warn('Automation metrics query failed:', error.message);
+    devWarn('Automation metrics query failed:', error.message);
     return { totalJobs: 0, successRate: 0, avgDuration: '0s', failedJobs: 0, retryRate: 0, queueDepth: 0 };
   }
 
@@ -867,7 +868,7 @@ export async function fetchTrustSpineMetrics(): Promise<TrustSpineMetricsData> {
     .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
 
   if (error) {
-    console.warn('Trust spine metrics query failed:', error.message);
+    devWarn('Trust spine metrics query failed:', error.message);
     return { totalReceipts: 0, successRate: 0, coveragePercent: 0, avgLatency: 0 };
   }
 
@@ -913,7 +914,7 @@ export async function fetchRunwayBurn(): Promise<RunwayBurnData> {
     .order('created_at', { ascending: false });
 
   if (error || !events?.length) {
-    console.warn('Runway/burn data not available:', error?.message ?? 'No finance events');
+    devWarn('Runway/burn data not available:', error?.message ?? 'No finance events');
     return {
       monthlyBurn: 0, runway: 0, cashOnHand: 0,
       biggestCostDriver: 'No data', burnChangePercent: 0,
@@ -1040,7 +1041,7 @@ export async function fetchSkillPackRegistry(): Promise<PaginatedResult<SkillPac
     .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
 
   if (error) {
-    console.warn('Skill pack registry query failed:', error.message);
+    devWarn('Skill pack registry query failed:', error.message);
     return { data: [], count: 0, page: 1, pageSize: 50 };
   }
 
