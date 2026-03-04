@@ -14,6 +14,7 @@ import {
   BuilderState,
   DEFAULT_CAPABILITIES,
 } from '@/contracts/control-plane';
+import { fetchOpsModelPolicy, updateOpsModelPolicy } from '@/services/opsFacadeClient';
 
 // ============================================================================
 // MOCK DATA
@@ -269,6 +270,14 @@ const MOCK_PROPOSALS: ConfigChangeProposal[] = [
 
 // Simulate network delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+export interface BuilderModelPolicy {
+  builder_primary_model: string;
+  builder_fallback_model: string;
+  reasoning_model: string;
+  updated_at: string;
+  updated_by: string;
+}
 
 /**
  * List all registry items with optional filters
@@ -538,4 +547,24 @@ export async function rollbackRollout(rolloutId: string): Promise<ConfigChangePr
 export async function listProposals(): Promise<ConfigChangeProposal[]> {
   await delay(200);
   return [...MOCK_PROPOSALS];
+}
+
+/**
+ * Get current builder model routing policy from admin facade.
+ */
+export async function getBuilderModelPolicy(): Promise<BuilderModelPolicy> {
+  const response = await fetchOpsModelPolicy();
+  return response.policy;
+}
+
+/**
+ * Update builder model routing policy in admin facade.
+ */
+export async function setBuilderModelPolicy(policy: {
+  builder_primary_model: string;
+  builder_fallback_model: string;
+  reasoning_model: string;
+}): Promise<BuilderModelPolicy> {
+  const response = await updateOpsModelPolicy(policy);
+  return response.policy;
 }

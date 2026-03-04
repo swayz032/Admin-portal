@@ -44,9 +44,12 @@ export default function ProviderCallLogPage() {
 
   const loadLogs = async () => {
     setLoading(true);
-    const data = await listProviderCallLogs();
-    setLogs(data);
-    setLoading(false);
+    try {
+      const data = await listProviderCallLogs();
+      setLogs(data.data ?? []);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filteredLogs = logs.filter(l => {

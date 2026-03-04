@@ -8,99 +8,116 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function jsonResponse(
+  body: Record<string, unknown>,
+  status: number,
+  correlationId: string,
+): Response {
+  return new Response(JSON.stringify({ ...body, correlation_id: correlationId }), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+      "x-correlation-id": correlationId,
+    },
+  });
+}
+
 serve(async (req: Request) => {
+  const correlationId = req.headers.get("x-correlation-id") || crypto.randomUUID();
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, {
+      headers: { ...corsHeaders, "x-correlation-id": correlationId },
+    });
   }
 
   try {
     const { email, password } = await req.json();
 
     if (!email || !password) {
-      return new Response(
-        JSON.stringify({ error: "Email and password are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "Email and password are required" }, 400, correlationId);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const dbUrl = Deno.env.get("SUPABASE_DB_URL")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const dbUrl = Deno.env.get("SUPABASE_DB_URL");
+    const missingEnv = [
+      !supabaseUrl ? "SUPABASE_URL" : null,
+      !serviceRoleKey ? "SUPABASE_SERVICE_ROLE_KEY" : null,
+      !dbUrl ? "SUPABASE_DB_URL" : null,
+    ].filter(Boolean) as string[];
+    if (missingEnv.length > 0) {
+      console.error("admin-sign-in config error", { correlationId, missingEnv });
+      return jsonResponse(
+        { error: "Function misconfigured", code: "CONFIG_ERROR", missing_env: missingEnv },
+        500,
+        correlationId,
+      );
+    }
+    const resolvedSupabaseUrl = supabaseUrl as string;
+    const resolvedServiceRoleKey = serviceRoleKey as string;
+    const resolvedDbUrl = dbUrl as string;
 
     // First try the normal password flow (in case email provider gets re-enabled)
-    const normalResponse = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+    const normalResponse = await fetch(`${resolvedSupabaseUrl}/auth/v1/token?grant_type=password`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": serviceRoleKey,
-        "Authorization": `Bearer ${serviceRoleKey}`,
+        "apikey": resolvedServiceRoleKey,
+        "Authorization": `Bearer ${resolvedServiceRoleKey}`,
       },
       body: JSON.stringify({ email, password }),
     });
 
     if (normalResponse.ok) {
       const sessionData = await normalResponse.json();
-      return new Response(
-        JSON.stringify(sessionData),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse(sessionData as Record<string, unknown>, 200, correlationId);
     }
 
-    const errData = await normalResponse.json();
+    const errData = await normalResponse.json().catch(() => ({}));
     
     // Only use fallback if email provider is disabled
     if (errData.error_code !== "email_provider_disabled") {
-      return new Response(
-        JSON.stringify({ error: errData.message || "Invalid login credentials" }),
-        { status: normalResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      return jsonResponse(
+        { error: (errData as { message?: string }).message || "Invalid login credentials" },
+        normalResponse.status,
+        correlationId,
       );
     }
 
     // Fallback: verify password manually and generate a magic link session
     console.log("Email provider disabled, using admin fallback");
 
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    const adminClient = createClient(resolvedSupabaseUrl, resolvedServiceRoleKey);
 
     // Find user by email
     const { data: usersData, error: listError } = await adminClient.auth.admin.listUsers();
     if (listError) {
-      console.error("listUsers error:", listError);
-      return new Response(
-        JSON.stringify({ error: "Authentication service error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      console.error("listUsers error:", { correlationId, listError });
+      return jsonResponse({ error: "Authentication service error" }, 500, correlationId);
     }
 
     const targetUser = usersData.users.find((u: any) => u.email === email);
     if (!targetUser) {
       // Don't reveal user doesn't exist
-      return new Response(
-        JSON.stringify({ error: "Invalid login credentials" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "Invalid login credentials" }, 401, correlationId);
     }
 
     // Query encrypted_password from auth.users using direct DB connection
     const { default: postgres } = await import("https://deno.land/x/postgresjs@v3.4.5/mod.js");
-    const sql = postgres(dbUrl);
+    const sql = postgres(resolvedDbUrl);
     
     try {
       const rows = await sql`SELECT encrypted_password FROM auth.users WHERE id = ${targetUser.id}`;
       if (!rows.length || !rows[0].encrypted_password) {
-        return new Response(
-          JSON.stringify({ error: "Invalid login credentials" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonResponse({ error: "Invalid login credentials" }, 401, correlationId);
       }
 
       const passwordHash = rows[0].encrypted_password;
       const passwordValid = bcrypt.compareSync(password, passwordHash);
       
       if (!passwordValid) {
-        return new Response(
-          JSON.stringify({ error: "Invalid login credentials" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonResponse({ error: "Invalid login credentials" }, 401, correlationId);
       }
     } finally {
       await sql.end();
@@ -113,27 +130,22 @@ serve(async (req: Request) => {
     });
 
     if (linkError || !linkData) {
-      console.error("generateLink error:", linkError);
-      return new Response(
-        JSON.stringify({ error: "Could not generate session" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      console.error("generateLink error:", { correlationId, linkError });
+      return jsonResponse({ error: "Could not generate session" }, 500, correlationId);
     }
 
     // Return the token hash so the client can verify it
-    return new Response(
-      JSON.stringify({
+    return jsonResponse(
+      {
         type: "magiclink_fallback",
         token_hash: linkData.properties.hashed_token,
         email,
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      },
+      200,
+      correlationId,
     );
   } catch (error) {
-    console.error("admin-sign-in error:", error);
-    return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("admin-sign-in error:", { correlationId, error });
+    return jsonResponse({ error: "Internal server error" }, 500, correlationId);
   }
 });

@@ -80,6 +80,38 @@ export interface OpsRolloutSummary {
   [key: string]: unknown;
 }
 
+export interface OpsProviderStatus {
+  provider: string;
+  lane: string;
+  status: 'connected' | 'degraded' | 'disconnected';
+  connection_status: string;
+  scopes: string[];
+  last_checked: string | null;
+  latency_ms: number;
+  p95_latency_ms: number;
+  error_rate: number;
+  webhook_error_rate: number;
+}
+
+export interface OpsWebhookDelivery {
+  webhook_id: string;
+  provider: string;
+  event_type: string;
+  status: string;
+  http_status: number | null;
+  attempt: number;
+  latency_ms: number;
+  delivered_at: string;
+}
+
+export interface OpsModelPolicy {
+  builder_primary_model: string;
+  builder_fallback_model: string;
+  reasoning_model: string;
+  updated_at: string;
+  updated_by: string;
+}
+
 export interface OpsPaginatedResponse<T> {
   items: T[];
   page: OpsPageInfo;
@@ -279,6 +311,66 @@ export async function fetchOpsRollouts(params?: {
   return opsFetch<OpsPaginatedResponse<OpsRolloutSummary>>(
     `/admin/ops/rollouts${qs ? `?${qs}` : ''}`,
   );
+}
+
+/** GET /admin/ops/providers — provider connectivity snapshot */
+export async function fetchOpsProviders(params?: {
+  provider?: string;
+  status?: string;
+}): Promise<{
+  items: OpsProviderStatus[];
+  count: number;
+  source: string;
+  warnings?: string[];
+  server_time: string;
+}> {
+  const search = new URLSearchParams();
+  if (params?.provider) search.set('provider', params.provider);
+  if (params?.status) search.set('status', params.status);
+  const qs = search.toString();
+  return opsFetch(`/admin/ops/providers${qs ? `?${qs}` : ''}`);
+}
+
+/** GET /admin/ops/webhooks — webhook delivery health */
+export async function fetchOpsWebhooks(params?: {
+  provider?: string;
+  status?: string;
+  limit?: number;
+}): Promise<{
+  items: OpsWebhookDelivery[];
+  count: number;
+  summary: { total: number; failed: number; success_rate: number };
+  source: string;
+  warnings?: string[];
+  server_time: string;
+}> {
+  const search = new URLSearchParams();
+  if (params?.provider) search.set('provider', params.provider);
+  if (params?.status) search.set('status', params.status);
+  if (params?.limit) search.set('limit', String(params.limit));
+  const qs = search.toString();
+  return opsFetch(`/admin/ops/webhooks${qs ? `?${qs}` : ''}`);
+}
+
+/** GET /admin/ops/model-policy — current builder model policy */
+export async function fetchOpsModelPolicy(): Promise<{
+  policy: OpsModelPolicy;
+  allowed_models: string[];
+  server_time: string;
+}> {
+  return opsFetch('/admin/ops/model-policy');
+}
+
+/** PUT /admin/ops/model-policy — update builder model policy */
+export async function updateOpsModelPolicy(payload: {
+  builder_primary_model: string;
+  builder_fallback_model: string;
+  reasoning_model: string;
+}): Promise<{ policy: OpsModelPolicy; server_time: string }> {
+  return opsFetch('/admin/ops/model-policy', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
 }
 
 /** Check if the ops facade backend is reachable */

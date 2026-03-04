@@ -25,6 +25,7 @@ import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { PublicRoute } from "./components/auth/PublicRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import AutomationPage from "./pages/Automation";
+import { supabaseConfigStatus } from "@/integrations/supabase/client";
 
 // New Trust Spine pages
 import Receipts from "./pages/Receipts";
@@ -47,16 +48,45 @@ import CreateAgent from "./pages/control-plane/Builder";
 
 const queryClient = new QueryClient();
 
+function ConfigErrorScreen({ missingVars }: { missingVars: string[] }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background px-6">
+      <div className="max-w-xl rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-foreground">
+        <h1 className="text-xl font-semibold tracking-tight">Admin Portal Configuration Error</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Required public environment variables are missing. The app cannot initialize authentication.
+        </p>
+        <div className="mt-4 rounded-md bg-background/80 p-4">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Missing Variables</p>
+          <ul className="list-disc pl-4 space-y-1 text-sm">
+            {missingVars.map((name) => (
+              <li key={name}>
+                <code>{name}</code>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="mt-4 text-sm text-muted-foreground">
+          Set these in your deployment service and redeploy. If this is Railway, add them to the frontend service environment.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 const App = () => (
   <ErrorBoundary>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <BrowserRouter>
-          <AuthProvider>
-            <SystemProvider>
-              <Toaster />
-              <Sonner />
-            <Routes>
+    {!supabaseConfigStatus.isValid ? (
+      <ConfigErrorScreen missingVars={supabaseConfigStatus.missingPublicEnv} />
+    ) : (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <BrowserRouter>
+            <AuthProvider>
+              <SystemProvider>
+                <Toaster />
+                <Sonner />
+              <Routes>
               <Route path="/auth" element={<PublicRoute><Auth /></PublicRoute>} />
               <Route path="/auth/mfa" element={<AuthMfa />} />
               <Route path="/access-denied" element={<AccessDenied />} />
@@ -307,12 +337,13 @@ const App = () => (
               <Route path="/control-plane/rollouts" element={<Navigate to="/agent-studio?tab=deploy" replace />} />
               
               <Route path="*" element={<NotFound />} />
-            </Routes>
-            </SystemProvider>
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+              </Routes>
+              </SystemProvider>
+            </AuthProvider>
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    )}
   </ErrorBoundary>
 );
 

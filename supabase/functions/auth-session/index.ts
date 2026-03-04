@@ -37,50 +37,76 @@ function parseCsvEnv(name: string): string[] {
     .filter(Boolean);
 }
 
+function jsonResponse(
+  body: Record<string, unknown>,
+  status: number,
+  correlationId: string,
+): Response {
+  return new Response(JSON.stringify({ ...body, correlation_id: correlationId }), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+      "x-correlation-id": correlationId,
+    },
+  });
+}
+
 serve(async (req: Request) => {
+  const correlationId = req.headers.get("x-correlation-id") || crypto.randomUUID();
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, {
+      headers: { ...corsHeaders, "x-correlation-id": correlationId },
+    });
   }
 
   try {
     const ip = req.headers.get("x-forwarded-for") || "unknown";
     if (!checkRateLimit(ip)) {
-      return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Rate limit exceeded" }, 429, correlationId);
     }
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "Unauthorized" }, 401, correlationId);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseAnon = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabaseAnon = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY");
+    const missingEnv = [
+      !supabaseUrl ? "SUPABASE_URL" : null,
+      !supabaseServiceKey ? "SUPABASE_SERVICE_ROLE_KEY" : null,
+      !supabaseAnon ? "SUPABASE_PUBLISHABLE_KEY|SUPABASE_ANON_KEY" : null,
+    ].filter(Boolean) as string[];
+    if (missingEnv.length > 0) {
+      console.error("auth-session config error", { correlationId, missingEnv });
+      return jsonResponse(
+        { error: "Function misconfigured", code: "CONFIG_ERROR", missing_env: missingEnv },
+        500,
+        correlationId,
+      );
+    }
+    const resolvedSupabaseUrl = supabaseUrl as string;
+    const resolvedServiceRoleKey = supabaseServiceKey as string;
+    const resolvedSupabaseAnon = supabaseAnon as string;
 
     // User-scoped client to validate the token
-    const userClient = createClient(supabaseUrl, supabaseAnon, {
+    const userClient = createClient(resolvedSupabaseUrl, resolvedSupabaseAnon, {
       global: { headers: { Authorization: authHeader } },
     });
 
     const { data: { user }, error: userError } = await userClient.auth.getUser();
     if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid session" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      console.warn("auth-session invalid session", { correlationId, userError: userError?.message });
+      return jsonResponse({ error: "Invalid session" }, 401, correlationId);
     }
 
     const userId = user.id;
     const email = user.email || "";
 
     // Service-role client for admin queries
-    const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+    const adminClient = createClient(resolvedSupabaseUrl, resolvedServiceRoleKey);
 
     const bootstrapEmails = [
       ...parseCsvEnv("ASPIRE_ADMIN_BOOTSTRAP_EMAILS"),
@@ -180,14 +206,19 @@ serve(async (req: Request) => {
         mfaEnabled,
         mfaVerified,
         mfaVerifiedAt: mfaVerified ? new Date().toISOString() : null,
+        correlation_id: correlationId,
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+          "x-correlation-id": correlationId,
+        },
+      }
     );
   } catch (error) {
-    console.error("auth-session error:", error);
-    return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("auth-session error:", { correlationId, error });
+    return jsonResponse({ error: "Internal server error" }, 500, correlationId);
   }
 });

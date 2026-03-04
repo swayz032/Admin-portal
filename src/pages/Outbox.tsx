@@ -40,9 +40,12 @@ export default function Outbox() {
 
   const loadJobs = async () => {
     setLoading(true);
-    const data = await listOutboxJobs();
-    setJobs(data);
-    setLoading(false);
+    try {
+      const data = await listOutboxJobs();
+      setJobs(data.data ?? []);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filteredJobs = jobs.filter(j => {

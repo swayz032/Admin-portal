@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useSystem } from '@/contexts/SystemContext';
 import { BuilderState, DEFAULT_BUILDER_STATE, DEFAULT_CAPABILITIES } from '@/contracts/control-plane';
-import { createDraftRegistryItem, proposeConfigChange } from '@/services/controlPlaneClient';
+import { createDraftRegistryItem, getBuilderModelPolicy, proposeConfigChange, setBuilderModelPolicy } from '@/services/controlPlaneClient';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   IdentityStep,
   CapabilitiesStep,
@@ -34,6 +35,27 @@ export default function Builder() {
     capabilities: DEFAULT_CAPABILITIES,
   });
   const [saving, setSaving] = useState(false);
+  const [policySaving, setPolicySaving] = useState(false);
+  const [modelPolicy, setModelPolicy] = useState({
+    builder_primary_model: 'codex-5.2',
+    builder_fallback_model: 'claude-opus-4.6',
+    reasoning_model: 'gpt-5.2',
+  });
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const policy = await getBuilderModelPolicy();
+        setModelPolicy({
+          builder_primary_model: policy.builder_primary_model,
+          builder_fallback_model: policy.builder_fallback_model,
+          reasoning_model: policy.reasoning_model,
+        });
+      } catch {
+        // Keep defaults if facade is unavailable
+      }
+    })();
+  }, []);
 
   const handleChange = (updates: Partial<BuilderState>) => {
     setState(prev => ({ ...prev, ...updates }));
@@ -91,6 +113,23 @@ export default function Builder() {
       toast.error('Failed to submit');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveModelPolicy = async () => {
+    setPolicySaving(true);
+    try {
+      const updated = await setBuilderModelPolicy(modelPolicy);
+      setModelPolicy({
+        builder_primary_model: updated.builder_primary_model,
+        builder_fallback_model: updated.builder_fallback_model,
+        reasoning_model: updated.reasoning_model,
+      });
+      toast.success('Builder model policy updated');
+    } catch {
+      toast.error('Failed to update model policy');
+    } finally {
+      setPolicySaving(false);
     }
   };
 
@@ -152,6 +191,69 @@ export default function Builder() {
       <div className="rounded-xl border border-border bg-card p-8">
         {renderStepContent()}
       </div>
+      {currentStep === STEPS.length - 1 && (
+        <div className="rounded-xl border border-border bg-card p-5 mt-4">
+          <h3 className="text-sm font-semibold mb-3">Builder Model Policy</h3>
+          <p className="text-xs text-muted-foreground mb-4">
+            Control the model routing used by builder workflows and advanced generation.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <p className="text-xs text-muted-foreground mb-2">Primary Builder</p>
+              <Select
+                value={modelPolicy.builder_primary_model}
+                onValueChange={(value) => setModelPolicy((prev) => ({ ...prev, builder_primary_model: value }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="codex-5.2">codex-5.2</SelectItem>
+                  <SelectItem value="gpt-5.2">gpt-5.2</SelectItem>
+                  <SelectItem value="gpt-5">gpt-5</SelectItem>
+                  <SelectItem value="gpt-5-mini">gpt-5-mini</SelectItem>
+                  <SelectItem value="claude-opus-4.6">claude-opus-4.6</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-2">Fallback Builder</p>
+              <Select
+                value={modelPolicy.builder_fallback_model}
+                onValueChange={(value) => setModelPolicy((prev) => ({ ...prev, builder_fallback_model: value }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="claude-opus-4.6">claude-opus-4.6</SelectItem>
+                  <SelectItem value="codex-5.2">codex-5.2</SelectItem>
+                  <SelectItem value="gpt-5.2">gpt-5.2</SelectItem>
+                  <SelectItem value="gpt-5">gpt-5</SelectItem>
+                  <SelectItem value="gpt-5-mini">gpt-5-mini</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-2">Reasoning Model</p>
+              <Select
+                value={modelPolicy.reasoning_model}
+                onValueChange={(value) => setModelPolicy((prev) => ({ ...prev, reasoning_model: value }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gpt-5.2">gpt-5.2</SelectItem>
+                  <SelectItem value="codex-5.2">codex-5.2</SelectItem>
+                  <SelectItem value="gpt-5">gpt-5</SelectItem>
+                  <SelectItem value="gpt-5-mini">gpt-5-mini</SelectItem>
+                  <SelectItem value="claude-opus-4.6">claude-opus-4.6</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="mt-4">
+            <Button variant="outline" onClick={handleSaveModelPolicy} disabled={policySaving}>
+              {policySaving ? 'Saving...' : 'Save Model Policy'}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Navigation — minimal footer */}
       <div className="flex items-center justify-between mt-6 pb-8">

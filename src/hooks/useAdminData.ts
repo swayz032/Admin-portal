@@ -36,6 +36,7 @@ import {
   type SkillPackData,
   type AcquisitionData,
 } from '@/services/apiClient';
+import { fetchOpsProviders } from '@/services/opsFacadeClient';
 
 import type { Approval, Incident, Receipt, Customer, Subscription, Provider } from '@/data/seed';
 import type { AutomationJob, AutomationFailure } from '@/data/automationSeed';
@@ -182,7 +183,33 @@ export function useSubscriptions(filters?: { status?: string; page?: number; pag
 /** Providers from finance_connections + call log stats */
 export function useProviders() {
   return useQuery<Provider>(
-    () => fetchProviders(),
+    async () => {
+      try {
+        const facade = await fetchOpsProviders();
+        const mapped: Provider[] = (facade.items ?? []).map((p) => ({
+          id: p.provider,
+          name: p.provider,
+          type: p.lane || 'Unknown',
+          status: p.status === 'connected' ? 'Healthy' : p.status === 'degraded' ? 'At Risk' : 'Read-only Allowed',
+          lastChecked: p.last_checked ?? '',
+          latency: p.latency_ms ?? 0,
+          p95Latency: p.p95_latency_ms ?? p.latency_ms ?? 0,
+          errorRate: p.error_rate ?? 0,
+          scopes: p.scopes ?? [],
+          lastSyncTime: p.last_checked ?? '',
+          recentReceiptsCount: 0,
+          permissionsSummary: (p.scopes ?? []).length > 0 ? `${(p.scopes ?? []).length} scopes connected` : 'No scopes configured',
+        }));
+        return {
+          data: mapped,
+          count: mapped.length,
+          page: 1,
+          pageSize: Math.max(mapped.length, 1),
+        };
+      } catch {
+        return fetchProviders();
+      }
+    },
     [],
   );
 }

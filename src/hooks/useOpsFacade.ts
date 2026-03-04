@@ -23,6 +23,9 @@ import {
   fetchOpsProviderCalls,
   fetchOpsOutbox,
   fetchOpsRollouts,
+  fetchOpsProviders,
+  fetchOpsWebhooks,
+  fetchOpsModelPolicy,
   type OpsHealthResponse,
   type OpsIncidentSummary,
   type OpsIncidentDetail,
@@ -30,6 +33,9 @@ import {
   type OpsProviderCallSummary,
   type OpsOutboxStatus,
   type OpsRolloutSummary,
+  type OpsProviderStatus,
+  type OpsWebhookDelivery,
+  type OpsModelPolicy,
   type OpsPageInfo,
 } from '@/services/opsFacadeClient';
 
@@ -206,4 +212,32 @@ export function useOpsRollouts(filters?: {
     error: result.error,
     refetch: result.refetch,
   };
+}
+
+/** Provider health snapshot from facade */
+export function useOpsProviders(filters?: {
+  provider?: string;
+  status?: string;
+}): FacadeQueryResult<{ items: OpsProviderStatus[]; count: number; source: string; warnings?: string[]; server_time: string }> {
+  return useFacadeQuery(
+    () => fetchOpsProviders(filters),
+    [filters?.provider, filters?.status],
+  );
+}
+
+/** Webhook delivery health from facade */
+export function useOpsWebhooks(filters?: {
+  provider?: string;
+  status?: string;
+  limit?: number;
+}): FacadeQueryResult<{ items: OpsWebhookDelivery[]; count: number; summary: { total: number; failed: number; success_rate: number }; source: string; warnings?: string[]; server_time: string }> {
+  return useFacadeQuery(
+    () => fetchOpsWebhooks(filters),
+    [filters?.provider, filters?.status, filters?.limit],
+  );
+}
+
+/** Builder model policy from facade */
+export function useOpsModelPolicy(): FacadeQueryResult<{ policy: OpsModelPolicy; allowed_models: string[]; server_time: string }> {
+  return useFacadeQuery(() => fetchOpsModelPolicy(), []);
 }

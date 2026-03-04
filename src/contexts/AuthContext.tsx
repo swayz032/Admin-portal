@@ -12,6 +12,7 @@ const TAB_HIDDEN_TIMEOUT_MS = 15 * 60 * 1000;     // 15 minutes — force re-aut
 
 // User activity events to track
 const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'scroll', 'touchstart', 'mousemove'] as const;
+const nextTraceId = () => crypto.randomUUID();
 
 interface AuthUser {
   id: string;
@@ -69,12 +70,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // --- Fetch session info from edge function ---
   const fetchSessionInfo = useCallback(async (accessToken: string) => {
+    const traceId = nextTraceId();
     try {
       const { data, error } = await supabase.functions.invoke('auth-session', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'x-correlation-id': traceId,
+        },
       });
       if (error || !data?.user) {
-        devWarn('auth-session error:', error);
+        devWarn('auth-session error:', { traceId, error });
         clearAuthState();
         return null;
       }
@@ -86,11 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await exchangeAdminToken(accessToken);
       } catch (exchangeErr) {
         // Keep primary auth/session valid even if ops facade token exchange fails.
-        devWarn('admin token exchange failed:', exchangeErr);
+        devWarn('admin token exchange failed:', { traceId, exchangeErr });
       }
       return info;
     } catch (err) {
-      devWarn('auth-session fetch failed:', err);
+      devWarn('auth-session fetch failed:', { traceId, err });
       clearAuthState();
       return null;
     }

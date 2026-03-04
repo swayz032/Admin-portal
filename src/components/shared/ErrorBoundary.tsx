@@ -41,6 +41,8 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       if (this.props.fallback) {
         return this.props.fallback;
       }
+      const configDiagnostic =
+        typeof window !== 'undefined' ? window.__ASPIRE_CONFIG_ERROR__ : undefined;
 
       return (
         <div style={{
@@ -64,6 +66,29 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             <p style={{ color: '#a1a1aa', marginBottom: '1.5rem', lineHeight: 1.5 }}>
               {this.state.error?.message || 'An unexpected error occurred in the Admin Portal.'}
             </p>
+            {configDiagnostic?.missingPublicEnv?.length ? (
+              <div
+                style={{
+                  textAlign: 'left',
+                  backgroundColor: '#111827',
+                  border: '1px solid #374151',
+                  borderRadius: '0.5rem',
+                  padding: '0.75rem',
+                  marginBottom: '1.25rem',
+                }}
+              >
+                <p style={{ margin: 0, fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.5rem' }}>
+                  Missing Environment Variables
+                </p>
+                <ul style={{ margin: 0, paddingLeft: '1rem', fontSize: '0.875rem', lineHeight: 1.5 }}>
+                  {configDiagnostic.missingPublicEnv.map((name) => (
+                    <li key={name}>
+                      <code>{name}</code>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
               <button
                 onClick={this.handleReset}

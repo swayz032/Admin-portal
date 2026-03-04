@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, AlertCircle, Lock, CheckCircle2, XCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Lock, CheckCircle2 } from 'lucide-react';
 import { z } from 'zod';
 
 // --- Rate Limiting Constants ---
@@ -18,50 +18,15 @@ const LOCKOUT_TIER1_MS = 60 * 1000;        // 60 seconds
 const LOCKOUT_TIER2_MS = 5 * 60 * 1000;    // 5 minutes
 const LOCKOUT_STORAGE_KEY = 'aspire_auth_lockout';
 
-// --- Password Validation Schema (Enterprise-grade) ---
+// --- Sign-in Validation Schema ---
 const loginSchema = z.object({
   email: z
     .string()
     .trim()
     .toLowerCase()
     .email({ message: 'Please enter a valid email address' }),
-  password: z
-    .string()
-    .min(12, { message: 'Password must be at least 12 characters' })
-    .regex(/[A-Z]/, { message: 'Password must contain at least one uppercase letter' })
-    .regex(/[a-z]/, { message: 'Password must contain at least one lowercase letter' })
-    .regex(/[0-9]/, { message: 'Password must contain at least one number' })
-    .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/, {
-      message: 'Password must contain at least one special character',
-    }),
+  password: z.string().min(1, { message: 'Please enter your password' }),
 });
-
-// --- Password Strength Helpers ---
-interface PasswordRequirement {
-  label: string;
-  met: boolean;
-}
-
-function getPasswordRequirements(password: string): PasswordRequirement[] {
-  return [
-    { label: 'At least 12 characters', met: password.length >= 12 },
-    { label: 'One uppercase letter (A-Z)', met: /[A-Z]/.test(password) },
-    { label: 'One lowercase letter (a-z)', met: /[a-z]/.test(password) },
-    { label: 'One number (0-9)', met: /[0-9]/.test(password) },
-    { label: 'One special character (!@#$...)', met: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) },
-  ];
-}
-
-function getPasswordStrength(password: string): { score: number; label: string; color: string } {
-  if (!password) return { score: 0, label: '', color: '' };
-  const reqs = getPasswordRequirements(password);
-  const met = reqs.filter((r) => r.met).length;
-  if (met <= 1) return { score: 20, label: 'Very weak', color: 'bg-red-500' };
-  if (met === 2) return { score: 40, label: 'Weak', color: 'bg-orange-500' };
-  if (met === 3) return { score: 60, label: 'Fair', color: 'bg-yellow-500' };
-  if (met === 4) return { score: 80, label: 'Strong', color: 'bg-blue-500' };
-  return { score: 100, label: 'Very strong', color: 'bg-green-500' };
-}
 
 // --- Lockout State Persistence (survives page refresh within browser) ---
 interface LockoutState {
@@ -140,7 +105,6 @@ export default function Auth() {
   const [info, setInfo] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPasswordHints, setShowPasswordHints] = useState(false);
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
 
   // --- Rate Limiting State ---
@@ -174,10 +138,6 @@ export default function Auth() {
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, [lockoutUntil]);
-
-  // --- Password Strength ---
-  const passwordRequirements = useMemo(() => getPasswordRequirements(password), [password]);
-  const passwordStrength = useMemo(() => getPasswordStrength(password), [password]);
 
   const isLockedOut = lockoutUntil !== null && Date.now() < lockoutUntil;
 
@@ -372,62 +332,11 @@ export default function Auth() {
               placeholder="••••••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              onFocus={() => setShowPasswordHints(true)}
-              onBlur={() => {
-                // Keep hints visible if password is partially filled but incomplete
-                if (passwordStrength.score >= 100) setShowPasswordHints(false);
-              }}
               disabled={isLoading || isLockedOut}
               required
               autoComplete="current-password"
               className="h-10 bg-secondary/50 border-border/50 focus:border-primary/40 transition-colors"
             />
-
-            {/* Password Strength Indicator */}
-            {showPasswordHints && password.length > 0 && (
-              <div className="mt-2.5 space-y-2">
-                <div className="flex items-center gap-2">
-                  <Progress
-                    value={passwordStrength.score}
-                    className="h-1.5 flex-1"
-                  />
-                  <span
-                    className={`text-[10px] font-medium uppercase tracking-wider ${
-                      passwordStrength.score <= 40
-                        ? 'text-red-500'
-                        : passwordStrength.score <= 60
-                          ? 'text-yellow-500'
-                          : passwordStrength.score <= 80
-                            ? 'text-blue-500'
-                            : 'text-green-500'
-                    }`}
-                  >
-                    {passwordStrength.label}
-                  </span>
-                </div>
-                <ul className="space-y-0.5">
-                  {passwordRequirements.map((req) => (
-                    <li
-                      key={req.label}
-                      className="flex items-center gap-1.5 text-[11px]"
-                    >
-                      {req.met ? (
-                        <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
-                      ) : (
-                        <XCircle className="h-3 w-3 text-muted-foreground/40 shrink-0" />
-                      )}
-                      <span
-                        className={
-                          req.met ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'
-                        }
-                      >
-                        {req.label}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
 
           <Button
