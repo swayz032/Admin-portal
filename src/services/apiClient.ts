@@ -310,16 +310,12 @@ export async function fetchCustomers(filters?: {
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  // Try suite_profiles first, fall back to app.suites
-  let query = supabase
+  // Query suite_profiles (no status column — derive from onboarding_completed_at)
+  const query = supabase
     .from('suite_profiles')
     .select('*', { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(from, to);
-
-  if (filters?.status) {
-    query = query.eq('status', filters.status.toLowerCase());
-  }
 
   const { data, error, count } = await query;
 
@@ -338,26 +334,38 @@ export async function fetchCustomers(filters?: {
 }
 
 function mapCustomerRow(row: Record<string, unknown>): Customer {
-  const metadata = (row.metadata as Record<string, unknown>) ?? {};
+  // Derive status from onboarding state (no status column in suite_profiles)
+  const hasOnboarding = !!row.onboarding_completed_at;
+  const derivedStatus = hasOnboarding ? 'active' : 'trial';
+
+  // Parse team_size string ("1-5") into a number (midpoint)
+  const teamSizeStr = row.team_size as string | null;
+  let teamSize: number | undefined;
+  if (teamSizeStr) {
+    const parts = teamSizeStr.split('-');
+    teamSize = parts.length === 2
+      ? Math.round((parseInt(parts[0]) + parseInt(parts[1])) / 2)
+      : parseInt(parts[0]) || undefined;
+  }
 
   return {
     id: (row.suite_id as string) ?? (row.id as string),
     name: (row.business_name as string) ?? (row.name as string) ?? 'Unknown',
-    status: mapCustomerStatus((row.status as string) ?? 'active'),
-    plan: (row.plan as string) ?? (metadata.plan as string) ?? 'Aspire',
-    mrr: (row.mrr as number) ?? (metadata.mrr as number) ?? 0,
-    riskFlag: mapRiskLabel((metadata.risk_flag as string) ?? 'none'),
-    openIncidents: (metadata.open_incidents as number) ?? 0,
-    openApprovals: (metadata.open_approvals as number) ?? 0,
+    status: mapCustomerStatus(derivedStatus),
+    plan: 'Aspire Suite',
+    mrr: 0, // Requires Stripe integration for real revenue data
+    riskFlag: 'None',
+    openIncidents: 0,
+    openApprovals: 0,
     lastActivity: (row.updated_at as string) ?? (row.created_at as string) ?? '',
-    integrations: (metadata.integrations as string[]) ?? [],
-    // Enterprise fields
+    integrations: [],
+    // Enterprise fields from actual suite_profiles columns
     displayId: (row.display_id as string) ?? undefined,
     officeDisplayId: (row.office_display_id as string) ?? undefined,
-    ownerName: (row.owner_name as string) ?? undefined,
-    ownerEmail: (row.owner_email as string) ?? undefined,
+    ownerName: (row.owner_name as string) ?? (row.name as string) ?? undefined,
+    ownerEmail: (row.email as string) ?? undefined,
     industry: (row.industry as string) ?? null,
-    teamSize: (row.team_size as number) ?? undefined,
+    teamSize,
   };
 }
 

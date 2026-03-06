@@ -97,7 +97,7 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error: queryError } = await supabase
         .from('suite_profiles')
-        .select('suite_id, display_id, office_display_id, business_name, owner_name, owner_email, industry, role, created_at')
+        .select('suite_id, display_id, office_display_id, business_name, owner_name, email, industry, created_at')
         .order('display_id', { ascending: true });
 
       if (queryError) {
@@ -136,7 +136,7 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
             displayId,
             businessName: (row as any).business_name as string || 'Unknown',
             ownerName: (row as any).owner_name as string || '',
-            ownerEmail: (row as any).owner_email as string || '',
+            ownerEmail: (row as any).email as string || '',
             industry: (row as any).industry as string | null,
             createdAt: (row as any).created_at as string || '',
             officeCount: 0,
@@ -152,7 +152,7 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
           label: `Office ${officeDisplayId || suite.officeCount}`,
           displayId: officeDisplayId,
           ownerName: (row as any).owner_name as string || '',
-          role: (row as any).role as string || 'member',
+          role: 'owner', // suite_profiles has one row per suite — always the owner
         });
       }
 
@@ -214,7 +214,7 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
       // Re-query to get fresh office list
       supabase
         .from('suite_profiles')
-        .select('suite_id, display_id, office_display_id, owner_name, role')
+        .select('suite_id, display_id, office_display_id, owner_name')
         .eq('suite_id', suite.id)
         .order('office_display_id', { ascending: true })
         .then(({ data }) => {
@@ -225,7 +225,7 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
               label: `Office ${row.office_display_id || idx + 1}`,
               displayId: row.office_display_id || '',
               ownerName: row.owner_name || '',
-              role: row.role || 'member',
+              role: 'owner',
             })));
           }
         });
