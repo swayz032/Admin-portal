@@ -68,6 +68,18 @@ export interface Customer {
   openApprovals: number;
   lastActivity: string;
   integrations: string[];
+  /** Premium suite display ID, e.g. "122" (renders as STE-122) */
+  displayId?: string;
+  /** Premium office display ID, e.g. "A01" (renders as OFF-A01) */
+  officeDisplayId?: string;
+  /** Suite owner name */
+  ownerName?: string;
+  /** Suite owner email */
+  ownerEmail?: string;
+  /** Industry */
+  industry?: string | null;
+  /** Number of team members (offices) */
+  teamSize?: number;
 }
 
 export interface Subscription {

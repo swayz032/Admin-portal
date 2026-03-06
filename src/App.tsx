@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { SystemProvider } from "@/contexts/SystemContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ScopeProvider } from "@/contexts/ScopeContext";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import Approvals from "./pages/Approvals";
@@ -84,6 +85,7 @@ const App = () => (
           <BrowserRouter>
             <AuthProvider>
               <SystemProvider>
+                <ScopeProvider>
                 <Toaster />
                 <Sonner />
               <Routes>
@@ -338,6 +340,7 @@ const App = () => (
               
               <Route path="*" element={<NotFound />} />
               </Routes>
+              </ScopeProvider>
               </SystemProvider>
             </AuthProvider>
           </BrowserRouter>

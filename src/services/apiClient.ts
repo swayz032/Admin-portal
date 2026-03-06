@@ -351,6 +351,13 @@ function mapCustomerRow(row: Record<string, unknown>): Customer {
     openApprovals: (metadata.open_approvals as number) ?? 0,
     lastActivity: (row.updated_at as string) ?? (row.created_at as string) ?? '',
     integrations: (metadata.integrations as string[]) ?? [],
+    // Enterprise fields
+    displayId: (row.display_id as string) ?? undefined,
+    officeDisplayId: (row.office_display_id as string) ?? undefined,
+    ownerName: (row.owner_name as string) ?? undefined,
+    ownerEmail: (row.owner_email as string) ?? undefined,
+    industry: (row.industry as string) ?? null,
+    teamSize: (row.team_size as number) ?? undefined,
   };
 }
 

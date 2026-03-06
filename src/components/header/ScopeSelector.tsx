@@ -1,5 +1,12 @@
-import { useState } from 'react';
-import { ChevronDown, Building2, Briefcase } from 'lucide-react';
+/**
+ * ScopeSelector — Enterprise suite/office scope picker
+ *
+ * Wired to real Supabase data via ScopeContext.
+ * Shows STE-XXX display IDs and business names for suites.
+ * Shows OFF-XXX display IDs and owner names for offices.
+ * Supports "All Suites" platform-wide view.
+ */
+import { ChevronDown, Building2, Briefcase, Globe, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -10,39 +17,42 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useSystem } from '@/contexts/SystemContext';
-
-interface Suite {
-  id: string;
-  name: string;
-}
-
-interface Office {
-  id: string;
-  name: string;
-  suiteId: string;
-}
-
-// Mock data - will be wired to real data later
-const suites: Suite[] = [
-  { id: 'SUITE-001', name: 'Suite 120' },
-  { id: 'SUITE-002', name: 'Suite 240' },
-  { id: 'SUITE-003', name: 'Suite 360' },
-];
-
-const offices: Office[] = [
-  { id: 'OFF-001', name: 'Office 14', suiteId: 'SUITE-001' },
-  { id: 'OFF-002', name: 'Office 22', suiteId: 'SUITE-001' },
-  { id: 'OFF-003', name: 'Office 8', suiteId: 'SUITE-002' },
-  { id: 'OFF-004', name: 'Office 31', suiteId: 'SUITE-001' },
-  { id: 'OFF-005', name: 'Office 12', suiteId: 'SUITE-002' },
-];
+import { useScope } from '@/contexts/ScopeContext';
 
 export function ScopeSelector() {
   const { viewMode } = useSystem();
-  const [selectedSuite, setSelectedSuite] = useState<Suite>(suites[0]);
-  const [selectedOffice, setSelectedOffice] = useState<Office>(offices[0]);
+  const {
+    suites,
+    offices,
+    selectedSuite,
+    selectedOffice,
+    selectSuite,
+    selectOffice,
+    isLoading,
+  } = useScope();
 
-  const filteredOffices = offices.filter(o => o.suiteId === selectedSuite.id);
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 px-2 h-8">
+        <Loader2 className="h-3.5 w-3.5 text-text-tertiary animate-spin" />
+        <span className="text-sm text-text-tertiary">Loading scopes...</span>
+      </div>
+    );
+  }
+
+  const suiteLabel = selectedSuite
+    ? viewMode === 'engineer'
+      ? `STE-${selectedSuite.displayId}`
+      : selectedSuite.businessName
+    : 'All Suites';
+
+  const officeLabel = selectedOffice
+    ? viewMode === 'engineer'
+      ? `OFF-${selectedOffice.displayId}`
+      : selectedOffice.ownerName || `Office ${selectedOffice.displayId}`
+    : selectedSuite
+      ? `All Offices (${offices.length})`
+      : 'All Offices';
 
   return (
     <div className="flex items-center gap-1">
@@ -50,66 +60,128 @@ export function ScopeSelector() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="h-8 gap-1 px-2">
-            <Building2 className="h-3.5 w-3.5 text-text-tertiary" />
-            <span className="text-sm">{selectedSuite.name}</span>
+            {selectedSuite ? (
+              <Building2 className="h-3.5 w-3.5 text-text-tertiary" />
+            ) : (
+              <Globe className="h-3.5 w-3.5 text-text-tertiary" />
+            )}
+            <span className="text-sm max-w-[180px] truncate">{suiteLabel}</span>
             <ChevronDown className="h-3 w-3 text-text-tertiary" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-48">
+        <DropdownMenuContent align="start" className="w-72">
           <DropdownMenuLabel className="text-xs">
-            {viewMode === 'operator' ? 'Select Suite' : 'Suite Scope'}
+            {viewMode === 'operator' ? 'Select Company' : 'Suite Scope'}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {suites.map((suite) => (
-            <DropdownMenuItem
-              key={suite.id}
-              onClick={() => {
-                setSelectedSuite(suite);
-                // Reset office to first in new suite
-                const firstOffice = offices.find(o => o.suiteId === suite.id);
-                if (firstOffice) setSelectedOffice(firstOffice);
-              }}
-              className={selectedSuite.id === suite.id ? 'bg-surface-2' : ''}
-            >
-              <span>{suite.name}</span>
-              {viewMode === 'engineer' && (
-                <span className="ml-auto text-xs text-text-tertiary font-mono">{suite.id}</span>
-              )}
+
+          {/* All Suites option */}
+          <DropdownMenuItem
+            onClick={() => selectSuite(null)}
+            className={!selectedSuite ? 'bg-surface-2' : ''}
+          >
+            <Globe className="h-3.5 w-3.5 mr-2 text-text-tertiary" />
+            <span>All Suites</span>
+            <span className="ml-auto text-xs text-text-tertiary">{suites.length}</span>
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
+          {suites.length === 0 ? (
+            <DropdownMenuItem disabled>
+              <span className="text-text-tertiary">No suites found</span>
             </DropdownMenuItem>
-          ))}
+          ) : (
+            suites.map((suite) => (
+              <DropdownMenuItem
+                key={suite.id}
+                onClick={() => selectSuite(suite)}
+                className={selectedSuite?.id === suite.id ? 'bg-surface-2' : ''}
+              >
+                <div className="flex flex-col flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate">{suite.businessName}</span>
+                    {suite.officeCount > 1 && (
+                      <span className="text-xs text-text-tertiary shrink-0">
+                        {suite.officeCount} members
+                      </span>
+                    )}
+                  </div>
+                  {viewMode === 'engineer' && (
+                    <span className="text-xs text-text-tertiary font-mono">
+                      STE-{suite.displayId} | {suite.ownerEmail}
+                    </span>
+                  )}
+                </div>
+              </DropdownMenuItem>
+            ))
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <span className="text-text-tertiary">•</span>
+      {selectedSuite && (
+        <>
+          <span className="text-text-tertiary">|</span>
 
-      {/* Office Selector */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-8 gap-1 px-2">
-            <Briefcase className="h-3.5 w-3.5 text-text-tertiary" />
-            <span className="text-sm">{selectedOffice.name}</span>
-            <ChevronDown className="h-3 w-3 text-text-tertiary" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-48">
-          <DropdownMenuLabel className="text-xs">
-            {viewMode === 'operator' ? 'Select Office' : 'Office Scope'}
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {filteredOffices.map((office) => (
-            <DropdownMenuItem
-              key={office.id}
-              onClick={() => setSelectedOffice(office)}
-              className={selectedOffice.id === office.id ? 'bg-surface-2' : ''}
-            >
-              <span>{office.name}</span>
-              {viewMode === 'engineer' && (
-                <span className="ml-auto text-xs text-text-tertiary font-mono">{office.id}</span>
+          {/* Office Selector — only shown when a suite is selected */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 gap-1 px-2">
+                <Briefcase className="h-3.5 w-3.5 text-text-tertiary" />
+                <span className="text-sm max-w-[160px] truncate">{officeLabel}</span>
+                <ChevronDown className="h-3 w-3 text-text-tertiary" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+              <DropdownMenuLabel className="text-xs">
+                {viewMode === 'operator' ? 'Select Team Member' : 'Office Scope'}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+
+              {/* All Offices option */}
+              <DropdownMenuItem
+                onClick={() => selectOffice(null)}
+                className={!selectedOffice ? 'bg-surface-2' : ''}
+              >
+                <span>All Offices</span>
+                <span className="ml-auto text-xs text-text-tertiary">{offices.length}</span>
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
+              {offices.length === 0 ? (
+                <DropdownMenuItem disabled>
+                  <span className="text-text-tertiary">No offices found</span>
+                </DropdownMenuItem>
+              ) : (
+                offices.map((office) => (
+                  <DropdownMenuItem
+                    key={office.id}
+                    onClick={() => selectOffice(office)}
+                    className={selectedOffice?.id === office.id ? 'bg-surface-2' : ''}
+                  >
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate">
+                          {office.ownerName || `Office ${office.displayId}`}
+                        </span>
+                        {office.role === 'owner' && (
+                          <span className="text-xs text-primary font-medium shrink-0">Owner</span>
+                        )}
+                      </div>
+                      {viewMode === 'engineer' && (
+                        <span className="text-xs text-text-tertiary font-mono">
+                          OFF-{office.displayId}
+                        </span>
+                      )}
+                    </div>
+                  </DropdownMenuItem>
+                ))
               )}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      )}
     </div>
   );
 }

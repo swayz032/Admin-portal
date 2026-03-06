@@ -7,19 +7,16 @@ import { DataTable } from '@/components/shared/DataTable';
 import { StatusChip } from '@/components/shared/StatusChip';
 import { RiskBadge } from '@/components/shared/RiskBadge';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Button } from '@/components/ui/button';
 import type { Customer } from '@/data/seed';
 import { useCustomers } from '@/hooks/useAdminData';
 import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatCurrency, formatTimeAgo } from '@/lib/formatters';
-import { Search, Users, TrendingUp, AlertTriangle, ChevronDown, Heart } from 'lucide-react';
+import { Search, Users, TrendingUp, Heart, Building2, Briefcase, Mail } from 'lucide-react';
 import { useSystem } from '@/contexts/SystemContext';
-import { ModeText } from '@/components/shared/ModeText';
 
 export default function Customers() {
   const { viewMode } = useSystem();
@@ -27,14 +24,15 @@ export default function Customers() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
 
   if (customersLoading) return <PageLoadingState showKPIs rows={5} />;
   if (customersError) return <EmptyState variant="error" title="Failed to load customers" description={customersError} actionLabel="Retry" onAction={refetchCustomers} />;
 
   const filteredCustomers = customers.filter(c => {
-    const matchesSearch = searchTerm === '' || 
-      c.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = searchTerm === '' ||
+      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.displayId && `STE-${c.displayId}`.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (c.ownerName && c.ownerName.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -43,11 +41,13 @@ export default function Customers() {
   const activeCustomers = customers.filter(c => c.status === 'Active').length;
   const atRiskCustomers = customers.filter(c => c.status === 'At Risk').length;
   const totalMRR = customers.reduce((sum, c) => sum + c.mrr, 0);
+  const totalMembers = customers.reduce((sum, c) => sum + (c.teamSize || 1), 0);
 
   const quickStats = [
     { label: 'active', value: activeCustomers, status: 'success' as const },
     { label: 'at risk', value: atRiskCustomers, status: atRiskCustomers > 0 ? 'warning' as const : 'success' as const },
     { label: 'total MRR', value: formatCurrency(totalMRR) },
+    { label: 'team members', value: totalMembers },
   ];
 
   const getStatusType = (status: Customer['status']) => {
@@ -70,32 +70,100 @@ export default function Customers() {
     }
   };
 
-  // Columns
+  // Enterprise columns with Suite ID, Owner, Office count
   const columns = viewMode === 'operator' ? [
-    { key: 'name', header: 'Customer' },
-    { 
-      key: 'status', 
-      header: 'Status', 
-      render: (c: Customer) => <StatusChip status={getStatusType(c.status)} label={getOperatorStatus(c.status)} /> 
+    {
+      key: 'name',
+      header: 'Company',
+      render: (c: Customer) => (
+        <div className="flex flex-col">
+          <span className="font-medium">{c.name}</span>
+          {c.ownerName && (
+            <span className="text-xs text-muted-foreground">{c.ownerName}</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'displayId',
+      header: 'Suite ID',
+      render: (c: Customer) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {c.displayId ? `STE-${c.displayId}` : '--'}
+        </span>
+      ),
+    },
+    {
+      key: 'officeDisplayId',
+      header: 'Office',
+      render: (c: Customer) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {c.officeDisplayId ? `OFF-${c.officeDisplayId}` : '--'}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (c: Customer) => <StatusChip status={getStatusType(c.status)} label={getOperatorStatus(c.status)} />,
     },
     { key: 'plan', header: 'Plan' },
     { key: 'mrr', header: 'Monthly Revenue', render: (c: Customer) => formatCurrency(c.mrr) },
-    { key: 'riskFlag', header: 'Health', render: (c: Customer) => {
-      if (c.riskFlag === 'None') return <span className="text-success text-sm">Good</span>;
-      if (c.riskFlag === 'Low') return <span className="text-warning text-sm">Fair</span>;
-      return <span className="text-destructive text-sm">Attention</span>;
-    }},
+    {
+      key: 'riskFlag',
+      header: 'Health',
+      render: (c: Customer) => {
+        if (c.riskFlag === 'None') return <span className="text-success text-sm">Good</span>;
+        if (c.riskFlag === 'Low') return <span className="text-warning text-sm">Fair</span>;
+        return <span className="text-destructive text-sm">Attention</span>;
+      },
+    },
   ] : [
-    { key: 'name', header: 'Customer' },
-    { 
-      key: 'status', 
-      header: 'Status', 
-      render: (c: Customer) => <StatusChip status={getStatusType(c.status)} label={c.status} /> 
+    {
+      key: 'name',
+      header: 'Customer',
+      render: (c: Customer) => (
+        <div className="flex flex-col">
+          <span className="font-medium">{c.name}</span>
+          {c.ownerEmail && (
+            <span className="text-xs text-muted-foreground font-mono">{c.ownerEmail}</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'displayId',
+      header: 'Suite',
+      render: (c: Customer) => (
+        <span className="font-mono text-xs">
+          {c.displayId ? `STE-${c.displayId}` : c.id.slice(0, 8)}
+        </span>
+      ),
+    },
+    {
+      key: 'officeDisplayId',
+      header: 'Office',
+      render: (c: Customer) => (
+        <span className="font-mono text-xs">
+          {c.officeDisplayId ? `OFF-${c.officeDisplayId}` : '--'}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (c: Customer) => <StatusChip status={getStatusType(c.status)} label={c.status} />,
     },
     { key: 'plan', header: 'Plan' },
     { key: 'mrr', header: 'MRR', render: (c: Customer) => formatCurrency(c.mrr) },
     { key: 'riskFlag', header: 'Risk', render: (c: Customer) => <RiskBadge risk={c.riskFlag} /> },
-    { key: 'openIncidents', header: 'Incidents', render: (c: Customer) => c.openIncidents > 0 ? <span className="text-warning">{c.openIncidents}</span> : '0' },
+    {
+      key: 'industry',
+      header: 'Industry',
+      render: (c: Customer) => (
+        <span className="text-sm text-muted-foreground">{c.industry || '--'}</span>
+      ),
+    },
     { key: 'lastActivity', header: 'Last Activity', render: (c: Customer) => <span className="text-muted-foreground">{formatTimeAgo(c.lastActivity)}</span> },
   ];
 
@@ -103,14 +171,14 @@ export default function Customers() {
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Hero Section */}
       <PageHero
-        title={viewMode === 'operator' 
-          ? `${activeCustomers} active customers generating ${formatCurrency(totalMRR)}/month`
-          : `${customers.length} customers tracked`}
-        subtitle={viewMode === 'operator' 
-          ? "View customer accounts and how they're doing" 
-          : "Manage customer accounts and monitor health"}
+        title={viewMode === 'operator'
+          ? `${activeCustomers} active companies generating ${formatCurrency(totalMRR)}/month`
+          : `${customers.length} suites tracked | ${totalMembers} offices`}
+        subtitle={viewMode === 'operator'
+          ? "View company accounts, team members, and health"
+          : "Manage suite accounts, office seats, and monitor health"}
         icon={<Users className="h-6 w-6" />}
-        status={atRiskCustomers === 0 
+        status={atRiskCustomers === 0
           ? { type: 'success', label: 'All healthy' }
           : { type: 'warning', label: `${atRiskCustomers} at risk` }}
       />
@@ -121,24 +189,24 @@ export default function Customers() {
       {/* Story Insights */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <InsightPanel
-          headline={atRiskCustomers === 0 ? "All customers healthy" : `${atRiskCustomers} need attention`}
-          subtext={atRiskCustomers === 0 ? "No customers at risk" : "Review at-risk customers below"}
+          headline={atRiskCustomers === 0 ? "All companies healthy" : `${atRiskCustomers} need attention`}
+          subtext={atRiskCustomers === 0 ? "No companies at risk" : "Review at-risk companies below"}
           trend={atRiskCustomers === 0 ? 'positive' : 'negative'}
           icon={<Heart className="h-5 w-5" />}
         />
         <InsightPanel
           headline={`${formatCurrency(totalMRR)} monthly revenue`}
-          subtext={`From ${activeCustomers} active customers`}
+          subtext={`From ${activeCustomers} active companies`}
           trend="positive"
           icon={<TrendingUp className="h-5 w-5" />}
           linkTo="/subscriptions"
           linkLabel="View revenue details"
         />
         <InsightPanel
-          headline={`${customers.filter(c => c.status === 'Trial').length} in trial`}
-          subtext="Potential new customers"
+          headline={`${totalMembers} total team members`}
+          subtext={`Across ${customers.length} companies`}
           trend="neutral"
-          icon={<Users className="h-5 w-5" />}
+          icon={<Briefcase className="h-5 w-5" />}
         />
       </div>
 
@@ -147,7 +215,9 @@ export default function Customers() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search customers..."
+            placeholder={viewMode === 'operator'
+              ? "Search by company name, owner, or Suite ID..."
+              : "Search by name, email, suite_id, or STE-XXX..."}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 bg-card border-border"
@@ -168,34 +238,68 @@ export default function Customers() {
       </div>
 
       {/* Customers Table */}
-      <Panel title={viewMode === 'operator' ? "All Customers" : "Customer List"} noPadding>
+      <Panel title={viewMode === 'operator' ? "All Companies" : "Suite Registry"} noPadding>
         <DataTable
           columns={columns}
           data={filteredCustomers}
           keyExtractor={(c: Customer) => c.id}
           onRowClick={(c) => setSelectedCustomer(c)}
-          emptyMessage={viewMode === 'operator' ? "No customers found." : "No customers match the current filters."}
+          emptyMessage={viewMode === 'operator' ? "No companies found." : "No suites match the current filters."}
         />
       </Panel>
 
-      {/* Customer Detail Dialog */}
+      {/* Customer Detail Dialog — Enterprise Grade */}
       <Dialog open={!!selectedCustomer} onOpenChange={() => setSelectedCustomer(null)}>
         <DialogContent className="bg-card border-border max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-foreground">
+            <DialogTitle className="text-foreground flex items-center gap-3">
+              <Building2 className="h-5 w-5 text-primary" />
               {selectedCustomer?.name}
             </DialogTitle>
           </DialogHeader>
           {selectedCustomer && (
             <div className="space-y-4">
+              {/* Status + Plan row */}
               <div className="flex items-center gap-2">
-                <StatusChip 
-                  status={getStatusType(selectedCustomer.status)} 
-                  label={viewMode === 'operator' ? getOperatorStatus(selectedCustomer.status) : selectedCustomer.status} 
+                <StatusChip
+                  status={getStatusType(selectedCustomer.status)}
+                  label={viewMode === 'operator' ? getOperatorStatus(selectedCustomer.status) : selectedCustomer.status}
                 />
                 <span className="text-sm text-muted-foreground">{selectedCustomer.plan}</span>
               </div>
-              
+
+              {/* Suite + Office IDs */}
+              <div className="flex items-center gap-4 p-3 rounded-lg bg-muted/50 border border-border">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-text-tertiary" />
+                  <span className="font-mono text-sm font-semibold">
+                    {selectedCustomer.displayId ? `STE-${selectedCustomer.displayId}` : '--'}
+                  </span>
+                </div>
+                <span className="text-text-tertiary">|</span>
+                <div className="flex items-center gap-2">
+                  <Briefcase className="h-4 w-4 text-text-tertiary" />
+                  <span className="font-mono text-sm font-semibold">
+                    {selectedCustomer.officeDisplayId ? `OFF-${selectedCustomer.officeDisplayId}` : '--'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Owner Info */}
+              <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                <p className="text-xs text-muted-foreground mb-1">
+                  {viewMode === 'operator' ? 'Owner' : 'Suite Owner'}
+                </p>
+                <p className="font-medium">{selectedCustomer.ownerName || 'Unknown'}</p>
+                {selectedCustomer.ownerEmail && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <Mail className="h-3 w-3 text-text-tertiary" />
+                    <span className="text-xs text-muted-foreground">{selectedCustomer.ownerEmail}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Metrics grid */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 rounded-lg bg-muted/50 border border-border">
                   <p className="text-xs text-muted-foreground">{viewMode === 'operator' ? 'Monthly Revenue' : 'MRR'}</p>
@@ -205,7 +309,7 @@ export default function Customers() {
                   <p className="text-xs text-muted-foreground">{viewMode === 'operator' ? 'Health' : 'Risk Flag'}</p>
                   <div className="mt-1">
                     {viewMode === 'operator' ? (
-                      selectedCustomer.riskFlag === 'None' 
+                      selectedCustomer.riskFlag === 'None'
                         ? <span className="text-success font-medium">Good</span>
                         : selectedCustomer.riskFlag === 'Low'
                         ? <span className="text-warning font-medium">Fair</span>
@@ -217,15 +321,19 @@ export default function Customers() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                  <p className="text-xs text-muted-foreground">{viewMode === 'operator' ? 'Open Issues' : 'Open Incidents'}</p>
+                  <p className="text-xs text-muted-foreground">Industry</p>
+                  <p className="text-sm font-medium">{selectedCustomer.industry || '--'}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                  <p className="text-xs text-muted-foreground">{viewMode === 'operator' ? 'Open Issues' : 'Incidents'}</p>
                   <p className={`text-lg font-semibold ${selectedCustomer.openIncidents > 0 ? 'text-warning' : ''}`}>
                     {selectedCustomer.openIncidents}
                   </p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                  <p className="text-xs text-muted-foreground">{viewMode === 'operator' ? 'Last Active' : 'Last Activity'}</p>
+                  <p className="text-xs text-muted-foreground">Last Active</p>
                   <p className="text-sm">{formatTimeAgo(selectedCustomer.lastActivity)}</p>
                 </div>
               </div>
