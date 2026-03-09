@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { Receipt } from '@/data/seed';
-import { useReceipts } from '@/hooks/useAdminData';
+import { useRealtimeReceipts } from '@/hooks/useRealtimeReceipts';
 import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatDate, formatTimeAgo } from '@/lib/formatters';
@@ -22,7 +22,7 @@ import { ModeText } from '@/components/shared/ModeText';
 
 export default function ActivityPage() {
   const { systemState, viewMode } = useSystem();
-  const { data: receipts, loading: receiptsLoading, error: receiptsError, refetch: refetchReceipts } = useReceipts();
+  const { data: receipts, loading: receiptsLoading, error: receiptsError, refetch: refetchReceipts } = useRealtimeReceipts();
   const [searchTerm, setSearchTerm] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState<string>('all');
   const [providerFilter, setProviderFilter] = useState<string>('all');

@@ -31,6 +31,8 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSystem } from '@/contexts/SystemContext';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useErrorStream } from '@/hooks/useErrorStream';
+import { useProviderHealthStream } from '@/hooks/useProviderHealthStream';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -68,6 +70,7 @@ const businessControlItems = [
   { to: '/business/costs-usage', icon: Receipt, label: 'Costs & Usage' },
   { to: '/business/revenue-addons', icon: TrendingUp, label: 'Revenue' },
   { to: '/business/acquisition-analytics', icon: BarChart3, label: 'Analytics' },
+  { to: '/business/audience', icon: Users, label: 'Audience' },
 ];
 
 const skillPackItems = [
@@ -78,6 +81,9 @@ const skillPackItems = [
 export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: SidebarProps) {
   const location = useLocation();
   const { viewMode } = useSystem();
+  const { counts: errorCounts } = useErrorStream();
+  const { degradedCount, disconnectedCount } = useProviderHealthStream();
+  const providerIssueCount = degradedCount + disconnectedCount;
   const [opsOpen, setOpsOpen] = useState(() =>
     operationsItems.some(i => location.pathname === i.to)
   );
@@ -91,11 +97,19 @@ export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, JSON.stringify(isCollapsed));
   }, [isCollapsed]);
 
+  // Badge count for specific nav items
+  const getBadgeCount = (to: string): number => {
+    if (to === '/incidents') return errorCounts.total;
+    if (to === '/connected-apps') return providerIssueCount;
+    return 0;
+  };
+
   const renderNavItem = (item: { to: string; icon: React.ComponentType<{ className?: string }>; label: string; engineerLabel?: string }) => {
     const isActive = location.pathname === item.to ||
       (item.to === '/home' && location.pathname === '/');
 
     const displayLabel = viewMode === 'engineer' && item.engineerLabel ? item.engineerLabel : item.label;
+    const badgeCount = getBadgeCount(item.to);
 
     const linkContent = (
       <NavLink
@@ -118,7 +132,17 @@ export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
           'h-3.5 w-3.5 flex-shrink-0 transition-colors',
           isActive ? 'text-primary' : 'text-muted-foreground/70 group-hover:text-foreground'
         )} />
-        {!isCollapsed && <span>{displayLabel}</span>}
+        {!isCollapsed && <span className="flex-1">{displayLabel}</span>}
+        {!isCollapsed && badgeCount > 0 && (
+          <span className={cn(
+            'ml-auto inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold',
+            item.to === '/incidents' && errorCounts.p0 > 0 ? 'bg-red-500 text-white animate-pulse' :
+            item.to === '/connected-apps' && disconnectedCount > 0 ? 'bg-red-500 text-white' :
+            'bg-amber-500 text-white',
+          )}>
+            {badgeCount > 99 ? '99+' : badgeCount}
+          </span>
+        )}
       </NavLink>
     );
 
@@ -326,7 +350,21 @@ export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
             </>
           )}
         </nav>
+
+        {/* Version badge */}
+        <div className={cn(
+          'shrink-0 border-t border-border px-3 py-2',
+          isCollapsed && 'px-2 text-center'
+        )}>
+          <span className="text-[10px] text-muted-foreground/40 font-mono">
+            {isCollapsed ? 'v1' : `v${APP_VERSION}`}
+          </span>
+        </div>
       </aside>
     </>
   );
 }
+
+// Injected at build time by Vite — see vite.config.ts `define` block.
+// Falls back to package.json version via import.meta.env.
+const APP_VERSION = __APP_VERSION__ ?? '0.0.0';

@@ -3,7 +3,9 @@ import { Panel } from '@/components/shared/Panel';
 import { Button } from '@/components/ui/button';
 import { X, AlertTriangle, FileCheck, Users, Server, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useIncidents, useApprovals, useCustomers, useProviders } from '@/hooks/useAdminData';
+import { useCustomers, useProviders } from '@/hooks/useAdminData';
+import { useRealtimeIncidents } from '@/hooks/useRealtimeIncidents';
+import { useRealtimeApprovals } from '@/hooks/useRealtimeApprovals';
 
 const attachmentIcons: Record<ContextAttachment['type'], React.ComponentType<{ className?: string }>> = {
   incident: AlertTriangle,
@@ -27,8 +29,8 @@ export function ContextAttachments() {
   const { attachments, addAttachment, removeAttachment } = useOpsDesk();
 
   // Real Supabase data
-  const { data: allIncidents } = useIncidents({ pageSize: 5 });
-  const { data: allApprovals } = useApprovals({ status: 'Pending', pageSize: 5 });
+  const { data: allIncidents } = useRealtimeIncidents({ pageSize: 5 });
+  const { data: allApprovals } = useRealtimeApprovals({ status: 'Pending', pageSize: 5 });
   const { data: allCustomers } = useCustomers({ pageSize: 5 });
   const { data: allProviders } = useProviders();
 

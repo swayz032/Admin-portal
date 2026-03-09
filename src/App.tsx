@@ -17,7 +17,7 @@ import Customers from "./pages/Customers";
 import Subscriptions from "./pages/Subscriptions";
 import ConnectedApps from "./pages/ConnectedApps";
 import Advanced from "./pages/Advanced";
-import LLMOpsDesk from "./pages/LLMOpsDesk";
+import AdminAvaChat from "./pages/AdminAvaChat";
 import Auth from "./pages/Auth";
 import AuthMfa from "./pages/AuthMfa";
 import AccessDenied from "./pages/AccessDenied";
@@ -38,6 +38,7 @@ import RunwayBurn from "./pages/business/RunwayBurn";
 import CostsUsage from "./pages/business/CostsUsage";
 import RevenueAddons from "./pages/business/RevenueAddons";
 import AcquisitionAnalytics from "./pages/business/AcquisitionAnalytics";
+import AudienceIntelligence from "./pages/business/AudienceIntelligence";
 
 // Skill Packs pages
 import SkillPackRegistry from "./pages/skillpacks/Registry";
@@ -198,7 +199,7 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <AppLayout>
-                      <LLMOpsDesk />
+                      <AdminAvaChat />
                     </AppLayout>
                   </ProtectedRoute>
                 }
@@ -283,6 +284,16 @@ const App = () => (
                   <ProtectedRoute>
                     <AppLayout>
                       <AcquisitionAnalytics />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/business/audience"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <AudienceIntelligence />
                     </AppLayout>
                   </ProtectedRoute>
                 }

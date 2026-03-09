@@ -6,6 +6,7 @@ import { useSystem } from '@/contexts/SystemContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { OperatorEngineerToggle } from '@/components/shared/OperatorEngineerToggle';
 import { GlobalSearch } from '@/components/header/GlobalSearch';
+import { ErrorNotificationBadge } from '@/components/admin-ava/ErrorNotificationBadge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -73,7 +74,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         
         <Button variant="ghost" size="icon" className="relative h-9 w-9">
           <Bell className="h-4 w-4 text-muted-foreground" />
-          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-destructive" />
+          <ErrorNotificationBadge criticalOnly className="absolute -top-0.5 -right-0.5" />
         </Button>
         
         <div className="w-px h-6 bg-border mx-1" />

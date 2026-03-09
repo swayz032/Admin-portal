@@ -6,7 +6,7 @@ import { ModeText } from '@/components/shared/ModeText';
 import { ModeDetails } from '@/components/shared/ModeDetails';
 import { useSystem } from '@/contexts/SystemContext';
 import type { AutomationJob, TraceEvent } from '@/data/automationSeed';
-import { useReceipts } from '@/hooks/useAdminData';
+import { useRealtimeReceipts } from '@/hooks/useRealtimeReceipts';
 import { SectionLoadingState } from '@/components/shared/PageLoadingState';
 import { formatDate, formatTimeAgo } from '@/lib/formatters';
 import { 
@@ -48,7 +48,7 @@ export function TraceDrawer({ job, open, onOpenChange }: TraceDrawerProps) {
   const { viewMode } = useSystem();
 
   // Query receipts by correlation ID to build trace events
-  const { data: receipts, loading: receiptsLoading } = useReceipts(
+  const { data: receipts, loading: receiptsLoading } = useRealtimeReceipts(
     job ? { correlationId: job.correlationId } : undefined
   );
 

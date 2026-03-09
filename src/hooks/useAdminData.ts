@@ -35,6 +35,8 @@ import {
   type RevenueData,
   type SkillPackData,
   type AcquisitionData,
+  type AudienceInsights,
+  fetchAudienceInsights,
 } from '@/services/apiClient';
 import { fetchOpsProviders } from '@/services/opsFacadeClient';
 
@@ -58,6 +60,7 @@ interface QueryResult<T> extends QueryState<T> {
 function useQuery<T>(
   fetcher: () => Promise<PaginatedResult<T>>,
   deps: unknown[] = [],
+  pollingInterval?: number,
 ): QueryResult<T> {
   const [state, setState] = useState<QueryState<T>>({
     data: [],
@@ -66,6 +69,7 @@ function useQuery<T>(
     error: null,
   });
   const mountedRef = useRef(true);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refetch = useCallback(async () => {
     setState(s => ({ ...s, loading: true, error: null }));
@@ -86,8 +90,21 @@ function useQuery<T>(
   useEffect(() => {
     mountedRef.current = true;
     refetch();
-    return () => { mountedRef.current = false; };
-  }, [refetch]);
+
+    if (pollingInterval && pollingInterval > 0) {
+      intervalRef.current = setInterval(() => {
+        if (mountedRef.current) refetch();
+      }, pollingInterval);
+    }
+
+    return () => {
+      mountedRef.current = false;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [refetch, pollingInterval]);
 
   return { ...state, refetch };
 }
@@ -103,11 +120,13 @@ interface SingleQueryResult<T> {
 function useSingleQuery<T>(
   fetcher: () => Promise<T>,
   deps: unknown[] = [],
+  pollingInterval?: number,
 ): SingleQueryResult<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refetch = useCallback(async () => {
     setLoading(true);
@@ -130,8 +149,21 @@ function useSingleQuery<T>(
   useEffect(() => {
     mountedRef.current = true;
     refetch();
-    return () => { mountedRef.current = false; };
-  }, [refetch]);
+
+    if (pollingInterval && pollingInterval > 0) {
+      intervalRef.current = setInterval(() => {
+        if (mountedRef.current) refetch();
+      }, pollingInterval);
+    }
+
+    return () => {
+      mountedRef.current = false;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [refetch, pollingInterval]);
 
   return { data, loading, error, refetch };
 }
@@ -252,17 +284,17 @@ export function useTrustSpineMetrics() {
 
 /** Runway & burn from finance_events */
 export function useRunwayBurn() {
-  return useSingleQuery<RunwayBurnData>(fetchRunwayBurn, []);
+  return useSingleQuery<RunwayBurnData>(fetchRunwayBurn, [], 15_000);
 }
 
 /** Costs & usage from provider_call_log */
 export function useCostsUsage() {
-  return useSingleQuery<CostsUsageData>(fetchCostsUsage, []);
+  return useSingleQuery<CostsUsageData>(fetchCostsUsage, [], 15_000);
 }
 
 /** Revenue & add-ons from finance_events */
 export function useRevenueAddons() {
-  return useSingleQuery<RevenueData>(fetchRevenueAddons, []);
+  return useSingleQuery<RevenueData>(fetchRevenueAddons, [], 15_000);
 }
 
 /** Skill pack registry from receipts */
@@ -270,15 +302,21 @@ export function useSkillPackRegistry() {
   return useQuery<SkillPackData>(
     () => fetchSkillPackRegistry(),
     [],
+    30_000,
   );
 }
 
 /** Skill pack analytics from receipts */
 export function useSkillPackAnalytics() {
-  return useSingleQuery(fetchSkillPackAnalytics, []);
+  return useSingleQuery(fetchSkillPackAnalytics, [], 30_000);
 }
 
 /** Acquisition analytics from suite_profiles */
 export function useAcquisitionAnalytics() {
-  return useSingleQuery<AcquisitionData>(fetchAcquisitionAnalytics, []);
+  return useSingleQuery<AcquisitionData>(fetchAcquisitionAnalytics, [], 15_000);
+}
+
+/** Audience intelligence from suite_profiles */
+export function useAudienceInsights() {
+  return useSingleQuery<AudienceInsights>(fetchAudienceInsights, [], 15_000);
 }

@@ -17,7 +17,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { Approval, Receipt } from '@/data/seed';
-import { useApprovals, useReceipts } from '@/hooks/useAdminData';
+import { useRealtimeApprovals } from '@/hooks/useRealtimeApprovals';
+import { useRealtimeReceipts } from '@/hooks/useRealtimeReceipts';
+import { submitApprovalDecision } from '@/services/opsFacadeClient';
 import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatDate, formatTimeAgo } from '@/lib/formatters';
@@ -28,8 +30,8 @@ import { ModeDetails } from '@/components/shared/ModeDetails';
 
 export default function Approvals() {
   const { viewMode, systemState } = useSystem();
-  const { data: initialApprovals, loading: approvalsLoading, error: approvalsError, refetch: refetchApprovals } = useApprovals();
-  const { data: fetchedReceipts } = useReceipts();
+  const { data: initialApprovals, loading: approvalsLoading, error: approvalsError, refetch: refetchApprovals } = useRealtimeApprovals();
+  const { data: fetchedReceipts } = useRealtimeReceipts();
   const [approvalsData, setApprovalsData] = useState<Approval[]>([]);
   const [localReceipts, setLocalReceipts] = useState<Receipt[]>([]);
   const [selectedApproval, setSelectedApproval] = useState<Approval | null>(null);
@@ -52,41 +54,63 @@ export default function Approvals() {
   const approvedApprovals = approvalsData.filter(a => a.status === 'Approved');
   const deniedApprovals = approvalsData.filter(a => a.status === 'Denied');
 
-  const handleApprovalDecision = () => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleApprovalDecision = async () => {
     if (!approvalDialog) return;
-    
+
+    const decision = approvalDialog.action === 'approve' ? 'approved' : 'denied';
     const newStatus = approvalDialog.action === 'approve' ? 'Approved' : 'Denied';
-    
-    setApprovalsData(prev => prev.map(a => 
-      a.id === approvalDialog.approval.id 
-        ? { ...a, status: newStatus as Approval['status'], decisionReason }
-        : a
-    ));
-    
-    if (selectedApproval?.id === approvalDialog.approval.id) {
-      setSelectedApproval(prev => prev ? { ...prev, status: newStatus as Approval['status'], decisionReason } : null);
+
+    setIsSubmitting(true);
+    try {
+      // Call backend — server generates receipt (Law #2)
+      const result = await submitApprovalDecision(
+        approvalDialog.approval.id,
+        decision as 'approved' | 'denied',
+        decisionReason || undefined,
+      );
+
+      // Optimistic UI update after successful backend call
+      setApprovalsData(prev => prev.map(a =>
+        a.id === approvalDialog.approval.id
+          ? { ...a, status: newStatus as Approval['status'], decisionReason }
+          : a
+      ));
+
+      if (selectedApproval?.id === approvalDialog.approval.id) {
+        setSelectedApproval(prev => prev ? { ...prev, status: newStatus as Approval['status'], decisionReason } : null);
+      }
+
+      // Server receipt will arrive via Realtime subscription.
+      // Add local receipt for immediate UI feedback.
+      const newReceipt: Receipt = {
+        id: result.receipt_id || `RCP-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        runId: `run-${Date.now()}`,
+        correlationId: `corr-${approvalDialog.approval.id}`,
+        actor: 'You',
+        actionType: `Approval ${newStatus}`,
+        outcome: 'Success',
+        provider: 'Internal',
+        providerCallId: '',
+        redactedRequest: `{"approvalId": "${approvalDialog.approval.id}", "action": "${approvalDialog.action}"}`,
+        redactedResponse: `{"status": "${newStatus}", "reason": "[REDACTED]"}`,
+        linkedIncidentId: approvalDialog.approval.linkedIncidentId,
+        linkedApprovalId: approvalDialog.approval.id,
+        linkedCustomerId: null,
+      };
+      setLocalReceipts(prev => [newReceipt, ...prev]);
+    } catch (err) {
+      // Fail closed (Law #3): backend error = decision NOT persisted, show error
+      console.error('Approval decision failed:', err);
+      // Refetch to get authoritative state
+      refetchApprovals();
+    } finally {
+      setIsSubmitting(false);
+      setApprovalDialog(null);
+      setDecisionReason('');
     }
-    
-    const newReceipt: Receipt = {
-      id: `RCP-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      runId: `run-${Date.now()}`,
-      correlationId: `corr-${approvalDialog.approval.id}`,
-      actor: 'You',
-      actionType: `Approval ${newStatus}`,
-      outcome: 'Success',
-      provider: 'Internal',
-      providerCallId: '',
-      redactedRequest: `{"approvalId": "${approvalDialog.approval.id}", "action": "${approvalDialog.action}"}`,
-      redactedResponse: `{"status": "${newStatus}", "reason": "[REDACTED]"}`,
-      linkedIncidentId: approvalDialog.approval.linkedIncidentId,
-      linkedApprovalId: approvalDialog.approval.id,
-      linkedCustomerId: null,
-    };
-    setLocalReceipts(prev => [newReceipt, ...prev]);
-    
-    setApprovalDialog(null);
-    setDecisionReason('');
   };
 
   const relatedReceipts = selectedApproval 
@@ -337,11 +361,12 @@ export default function Approvals() {
               <Button variant="outline" onClick={() => setApprovalDialog(null)}>
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={handleApprovalDecision}
+                disabled={isSubmitting}
                 className={approvalDialog?.action === 'deny' ? 'bg-destructive hover:bg-destructive/90' : ''}
               >
-                {approvalDialog?.action === 'approve' ? 'Approve' : 'Deny'}
+                {isSubmitting ? 'Submitting...' : approvalDialog?.action === 'approve' ? 'Approve' : 'Deny'}
               </Button>
             </DialogFooter>
           </DialogContent>
