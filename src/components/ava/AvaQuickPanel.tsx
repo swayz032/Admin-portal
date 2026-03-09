@@ -9,7 +9,8 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useApprovals, useIncidents } from '@/hooks/useAdminData';
+import { useRealtimeApprovals } from '@/hooks/useRealtimeApprovals';
+import { useRealtimeIncidents } from '@/hooks/useRealtimeIncidents';
 
 interface AvaQuickPanelProps {
   isOpen: boolean;
@@ -18,8 +19,8 @@ interface AvaQuickPanelProps {
 
 export function AvaQuickPanel({ isOpen, onClose }: AvaQuickPanelProps) {
   // Real Supabase data
-  const { data: allApprovals } = useApprovals({ status: 'Pending' });
-  const { data: allIncidents } = useIncidents({ status: 'Open' });
+  const { data: allApprovals } = useRealtimeApprovals({ status: 'Pending' });
+  const { data: allIncidents } = useRealtimeIncidents({ status: 'Open' });
   const pendingApprovals = allApprovals.length;
   const openIncidents = allIncidents.length;
 

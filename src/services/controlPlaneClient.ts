@@ -271,6 +271,22 @@ const MOCK_PROPOSALS: ConfigChangeProposal[] = [
 // Simulate network delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+/** Emit a local receipt for state-changing control plane operations (Law #2). */
+function emitControlPlaneReceipt(action: string, outcome: 'Success' | 'Failed', detail?: string): void {
+  if (typeof window !== 'undefined' && window.dispatchEvent) {
+    window.dispatchEvent(new CustomEvent('aspire:receipt', {
+      detail: {
+        action,
+        outcome,
+        actor: 'admin',
+        receiptType: 'control_plane',
+        summary: detail,
+        timestamp: new Date().toISOString(),
+      },
+    }));
+  }
+}
+
 export interface BuilderModelPolicy {
   builder_primary_model: string;
   builder_fallback_model: string;
@@ -350,7 +366,8 @@ export async function createDraftRegistryItem(state: BuilderState): Promise<Regi
     updated_at: new Date().toISOString(),
     internal: state.internal,
   };
-  
+
+  emitControlPlaneReceipt('registry.create_draft', 'Success', `Created draft: ${state.name}`);
   return newItem;
 }
 
@@ -368,11 +385,14 @@ export async function updateDraftRegistryItem(
     throw new Error(`Registry item ${id} not found`);
   }
   
-  return {
+  const updated = {
     ...existing,
     ...patch,
     updated_at: new Date().toISOString(),
   } as RegistryItem;
+
+  emitControlPlaneReceipt('registry.update_draft', 'Success', `Updated draft: ${id}`);
+  return updated;
 }
 
 /**
@@ -394,7 +414,8 @@ export async function proposeConfigChange(
     requested_by: 'current-user',
     requested_at: new Date().toISOString(),
   };
-  
+
+  emitControlPlaneReceipt('config.propose_change', 'Success', `Proposal: ${proposal.summary}`);
   return proposal;
 }
 
@@ -452,7 +473,8 @@ export async function createRollout(payload: Partial<Rollout>): Promise<Rollout>
       },
     ],
   };
-  
+
+  emitControlPlaneReceipt('rollout.create', 'Success', `Rollout: ${rollout.registry_item_name} → ${rollout.environment}`);
   return rollout;
 }
 
@@ -470,21 +492,24 @@ export async function setRolloutPercentage(
     throw new Error(`Rollout ${rolloutId} not found`);
   }
   
-  return {
+  const updated = {
     ...rollout,
     percentage,
-    status: percentage === 100 ? 'completed' : 'active',
+    status: percentage === 100 ? 'completed' as const : 'active' as const,
     updated_at: new Date().toISOString(),
     history: [
       ...rollout.history,
       {
         timestamp: new Date().toISOString(),
-        action: 'percentage_changed',
+        action: 'percentage_changed' as const,
         percentage,
         actor: 'current-user',
       },
     ],
   };
+
+  emitControlPlaneReceipt('rollout.set_percentage', 'Success', `${rolloutId} → ${percentage}%`);
+  return updated;
 }
 
 /**
@@ -498,20 +523,23 @@ export async function pauseRollout(rolloutId: string): Promise<Rollout> {
     throw new Error(`Rollout ${rolloutId} not found`);
   }
   
-  return {
+  const paused = {
     ...rollout,
-    status: 'paused',
+    status: 'paused' as const,
     updated_at: new Date().toISOString(),
     history: [
       ...rollout.history,
       {
         timestamp: new Date().toISOString(),
-        action: 'paused',
+        action: 'paused' as const,
         percentage: rollout.percentage,
         actor: 'current-user',
       },
     ],
   };
+
+  emitControlPlaneReceipt('rollout.pause', 'Success', `Paused: ${rolloutId}`);
+  return paused;
 }
 
 /**
@@ -539,6 +567,9 @@ export async function rollbackRollout(rolloutId: string): Promise<ConfigChangePr
     requested_by: 'current-user',
     requested_at: new Date().toISOString(),
   };
+
+  emitControlPlaneReceipt('rollout.rollback', 'Success', `Rollback: ${rollout.registry_item_name}`);
+  return proposal;
 }
 
 /**

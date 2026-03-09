@@ -80,6 +80,49 @@ export interface Customer {
   industry?: string | null;
   /** Number of team members (offices) */
   teamSize?: number;
+
+  // Demographics
+  gender?: string;
+  dateOfBirth?: string;
+  roleCategory?: string;
+  entityType?: string;
+  yearsInBusiness?: string;
+  customerType?: string;
+  salesChannel?: string;
+  annualRevenueBand?: string;
+  incomeRange?: string;
+  industrySpecialty?: string;
+
+  // Acquisition
+  referralSource?: string;
+  createdAt?: string;
+
+  // Location
+  homeCity?: string;
+  homeState?: string;
+  homeCountry?: string;
+  businessCity?: string;
+  businessState?: string;
+  businessCountry?: string;
+  businessAddressSameAsHome?: boolean;
+
+  // Needs & Goals
+  servicesNeeded?: string[];
+  servicesPriority?: string[];
+  currentTools?: string[];
+  toolsPlanning?: string[];
+  businessGoals?: string[];
+  painPoint?: string;
+
+  // Preferences
+  preferredChannel?: string;
+  timezone?: string;
+  currency?: string;
+
+  // Onboarding
+  onboardingCompletedAt?: string;
+  consentPersonalization?: boolean;
+  consentCommunications?: boolean;
 }
 
 export interface Subscription {

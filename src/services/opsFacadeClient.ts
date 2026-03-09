@@ -149,14 +149,11 @@ export interface OpsError {
 // CLIENT
 // ============================================================================
 
-function getAdminToken(): string {
-  // Admin JWT stored in sessionStorage after login
-  return sessionStorage.getItem('aspire_admin_token') ?? '';
-}
+import { getAdminToken, setAdminToken, clearAdminToken as clearToken } from '@/lib/adminAuth';
+export { clearToken as clearAdminToken };
 
-export function clearAdminToken(): void {
-  sessionStorage.removeItem('aspire_admin_token');
-}
+// Re-export getAdminToken for backward compat
+export { getAdminToken };
 
 export interface AdminTokenExchangeResponse {
   admin_token: string;
@@ -240,7 +237,7 @@ export async function exchangeAdminToken(accessToken: string): Promise<AdminToke
   }
 
   const data = await response.json() as AdminTokenExchangeResponse;
-  sessionStorage.setItem('aspire_admin_token', data.admin_token);
+  setAdminToken(data.admin_token);
   return data;
 }
 
@@ -399,6 +396,18 @@ export async function updateOpsModelPolicy(payload: {
   return opsFetch('/admin/ops/model-policy', {
     method: 'PUT',
     body: JSON.stringify(payload),
+  });
+}
+
+/** POST /admin/ops/approvals/:id/decide — approve or deny a pending approval */
+export async function submitApprovalDecision(
+  approvalId: string,
+  decision: 'approved' | 'denied',
+  reason?: string,
+): Promise<{ receipt_id: string; status: string }> {
+  return opsFetch(`/admin/ops/approvals/${encodeURIComponent(approvalId)}/decide`, {
+    method: 'POST',
+    body: JSON.stringify({ decision, reason }),
   });
 }
 

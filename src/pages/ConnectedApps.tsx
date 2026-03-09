@@ -17,6 +17,8 @@ import { formatTimeAgo, formatLatency } from '@/lib/formatters';
 import { Plug, Settings, RefreshCw, Unlink, ChevronRight, CheckCircle, Shield, Zap, AlertTriangle } from 'lucide-react';
 import { useSystem } from '@/contexts/SystemContext';
 import { ModeText } from '@/components/shared/ModeText';
+import { ProviderHealthGrid } from '@/components/admin-ava/ProviderHealthGrid';
+import { useProviderHealthStream } from '@/hooks/useProviderHealthStream';
 
 const pendingConnections = [
   { id: 'CONN-001', provider: 'GitHub', requestedBy: 'dev-team@zenith.io', requestedAt: '2026-01-08T08:00:00Z' },
@@ -34,6 +36,7 @@ type PendingApprovalRequest = {
 export default function ConnectedApps() {
   const { viewMode, systemState } = useSystem();
   const { data: providers, loading: providersLoading, error: providersError, refetch: refetchProviders } = useProviders();
+  const { providers: liveProviders, isConnected: streamConnected, hasIssues: liveHasIssues } = useProviderHealthStream();
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [actionDialog, setActionDialog] = useState<{ provider: Provider; action: 'scope' | 'rotate' | 'disconnect' } | null>(null);
   const [createdApprovalRequests, setCreatedApprovalRequests] = useState<PendingApprovalRequest[]>([]);
@@ -168,6 +171,11 @@ export default function ConnectedApps() {
             ? { type: 'success', label: 'All healthy' }
             : { type: 'warning', label: `${atRiskProviders} slow` }}
         />
+
+        {/* Live Provider Health (SSE) */}
+        <Panel title="Live Provider Health" noPadding={false}>
+          <ProviderHealthGrid liveProviders={streamConnected ? liveProviders : undefined} />
+        </Panel>
 
         {/* Quick Stats */}
         <QuickStats stats={quickStats} />

@@ -4,7 +4,9 @@ import { Sidebar } from './Sidebar';
 import { useSystem } from '@/contexts/SystemContext';
 import { AlertTriangle } from 'lucide-react';
 import { AvaFloatingButton } from '@/components/ava/AvaFloatingButton';
-import { useApprovals, useIncidents } from '@/hooks/useAdminData';
+import { ProviderAlertBanner } from '@/components/admin-ava/ProviderAlertBanner';
+import { useRealtimeApprovals } from '@/hooks/useRealtimeApprovals';
+import { useRealtimeIncidents } from '@/hooks/useRealtimeIncidents';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -26,8 +28,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [sidebarCollapsed]);
 
   // Real Supabase data for Ava notification counts
-  const { data: allApprovals } = useApprovals({ status: 'Pending' });
-  const { data: allIncidents } = useIncidents({ status: 'Open' });
+  const { data: allApprovals } = useRealtimeApprovals({ status: 'Pending' });
+  const { data: allIncidents } = useRealtimeIncidents({ status: 'Open' });
   const avaNotifications = allApprovals.length + allIncidents.length;
 
   return (
@@ -41,6 +43,9 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
         <Header onMenuClick={() => setSidebarOpen(true)} />
+
+        {/* Provider degradation/disconnection alert */}
+        <ProviderAlertBanner />
 
         {systemState.safetyMode && (
           <div className="safety-banner">

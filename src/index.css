@@ -474,3 +474,107 @@
     scrollbar-color: hsl(var(--border) / 0.3) transparent;
   }
 }
+
+/* ── Shimmer Effects (AI Elements style) ─────────────────────────── */
+@keyframes shimmer-sweep {
+  0% {
+    mask-position: -200% 0;
+    -webkit-mask-position: -200% 0;
+  }
+  100% {
+    mask-position: 200% 0;
+    -webkit-mask-position: 200% 0;
+  }
+}
+
+@keyframes shimmer-block-sweep {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer-text {
+  mask-image: linear-gradient(
+    90deg,
+    hsl(var(--foreground)) 0%,
+    hsl(var(--foreground)) 40%,
+    hsl(var(--foreground) / 0.3) 50%,
+    hsl(var(--foreground)) 60%,
+    hsl(var(--foreground)) 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    hsl(var(--foreground)) 0%,
+    hsl(var(--foreground)) 40%,
+    hsl(var(--foreground) / 0.3) 50%,
+    hsl(var(--foreground)) 60%,
+    hsl(var(--foreground)) 100%
+  );
+  mask-size: 200% 100%;
+  -webkit-mask-size: 200% 100%;
+  animation: shimmer-sweep var(--shimmer-duration, 2s) ease-in-out infinite;
+}
+
+.shimmer-block {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--surface-2)) 0%,
+    hsl(var(--surface-3)) 40%,
+    hsl(var(--surface-2) / 0.5) 50%,
+    hsl(var(--surface-3)) 60%,
+    hsl(var(--surface-2)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-block-sweep 1.5s ease-in-out infinite;
+}
+
+/* ── Markdown body styles ────────────────────────────────────────── */
+.markdown-body {
+  line-height: 1.6;
+}
+
+.markdown-body > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-body > *:last-child {
+  margin-bottom: 0;
+}
+
+/* ── Orb Animations (Canvas Mode port) ─────────────────────────── */
+@keyframes orb-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-16px);
+  }
+}
+
+@keyframes orb-pulse {
+  0%, 100% {
+    transform: scale(1.0);
+  }
+  50% {
+    transform: scale(1.07);
+  }
+}
+
+@keyframes mic-ring-pulse {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+/* Hide native video controls on orb videos */
+video.orb-video::-webkit-media-controls {
+  display: none !important;
+}
