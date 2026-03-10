@@ -314,6 +314,7 @@ const App = () => (
                 }
               />
 
+
               {/* Skill Packs Routes */}
               <Route
                 path="/skill-packs/registry"
