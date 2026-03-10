@@ -3,3 +3,5 @@ node_modules
 *.md
 .env*
 dist
+import-my-portal-main
+supabase/.temp

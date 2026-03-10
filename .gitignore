@@ -23,3 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Nested duplicate directory (legacy)
+import-my-portal-main/
+supabase/.temp/

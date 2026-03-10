@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,46 +8,59 @@ import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { SystemProvider } from "@/contexts/SystemContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ScopeProvider } from "@/contexts/ScopeContext";
-import Home from "./pages/Home";
-import Dashboard from "./pages/Dashboard";
-import Approvals from "./pages/Approvals";
-import Activity from "./pages/Activity";
-import Safety from "./pages/Safety";
-import Incidents from "./pages/Incidents";
-import Customers from "./pages/Customers";
-import Subscriptions from "./pages/Subscriptions";
-import ConnectedApps from "./pages/ConnectedApps";
-import Advanced from "./pages/Advanced";
-import AdminAvaChat from "./pages/AdminAvaChat";
-import Auth from "./pages/Auth";
-import AuthMfa from "./pages/AuthMfa";
-import AccessDenied from "./pages/AccessDenied";
-import NotFound from "./pages/NotFound";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { PublicRoute } from "./components/auth/PublicRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
-import AutomationPage from "./pages/Automation";
 import { supabaseConfigStatus } from "@/integrations/supabase/client";
+import { Loader2 } from "lucide-react";
 
-// New Trust Spine pages
-import Receipts from "./pages/Receipts";
-import Outbox from "./pages/Outbox";
-import ProviderCallLog from "./pages/ProviderCallLog";
+// Eagerly loaded (initial routes — no lazy)
+import Home from "./pages/Home";
+import Auth from "./pages/Auth";
+
+// Lazy loaded (code-split per route)
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Approvals = lazy(() => import("./pages/Approvals"));
+const Activity = lazy(() => import("./pages/Activity"));
+const Safety = lazy(() => import("./pages/Safety"));
+const Incidents = lazy(() => import("./pages/Incidents"));
+const Customers = lazy(() => import("./pages/Customers"));
+const Subscriptions = lazy(() => import("./pages/Subscriptions"));
+const ConnectedApps = lazy(() => import("./pages/ConnectedApps"));
+const Advanced = lazy(() => import("./pages/Advanced"));
+const AdminAvaChat = lazy(() => import("./pages/AdminAvaChat"));
+const AutomationPage = lazy(() => import("./pages/Automation"));
+const AuthMfa = lazy(() => import("./pages/AuthMfa"));
+const AccessDenied = lazy(() => import("./pages/AccessDenied"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+
+// Trust Spine pages
+const Receipts = lazy(() => import("./pages/Receipts"));
+const Outbox = lazy(() => import("./pages/Outbox"));
+const ProviderCallLog = lazy(() => import("./pages/ProviderCallLog"));
 
 // Business Control pages
-import RunwayBurn from "./pages/business/RunwayBurn";
-import CostsUsage from "./pages/business/CostsUsage";
-import RevenueAddons from "./pages/business/RevenueAddons";
-import AcquisitionAnalytics from "./pages/business/AcquisitionAnalytics";
-import AudienceIntelligence from "./pages/business/AudienceIntelligence";
+const RunwayBurn = lazy(() => import("./pages/business/RunwayBurn"));
+const CostsUsage = lazy(() => import("./pages/business/CostsUsage"));
+const RevenueAddons = lazy(() => import("./pages/business/RevenueAddons"));
+const AcquisitionAnalytics = lazy(() => import("./pages/business/AcquisitionAnalytics"));
+const AudienceIntelligence = lazy(() => import("./pages/business/AudienceIntelligence"));
 
 // Skill Packs pages
-import SkillPackRegistry from "./pages/skillpacks/Registry";
-import SkillPackAnalytics from "./pages/skillpacks/Analytics";
+const SkillPackRegistry = lazy(() => import("./pages/skillpacks/Registry"));
+const SkillPackAnalytics = lazy(() => import("./pages/skillpacks/Analytics"));
 
 // Control Plane pages
-import AgentStudio from "./pages/AgentStudio";
-import CreateAgent from "./pages/control-plane/Builder";
+const AgentStudio = lazy(() => import("./pages/AgentStudio"));
+const CreateAgent = lazy(() => import("./pages/control-plane/Builder"));
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-64">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
+}
 
 const queryClient = new QueryClient();
 
@@ -89,6 +103,7 @@ const App = () => (
                 <ScopeProvider>
                 <Toaster />
                 <Sonner />
+                <Suspense fallback={<PageLoader />}>
               <Routes>
               <Route path="/auth" element={<PublicRoute><Auth /></PublicRoute>} />
               <Route path="/auth/mfa" element={<AuthMfa />} />
@@ -214,7 +229,7 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              
+
               {/* Trust Spine Pages */}
               <Route
                 path="/receipts"
@@ -246,7 +261,7 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              
+
               {/* Business Control Routes */}
               <Route
                 path="/business/runway-burn"
@@ -298,7 +313,8 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              
+
+
               {/* Skill Packs Routes */}
               <Route
                 path="/skill-packs/registry"
@@ -320,7 +336,7 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              
+
               {/* Agent Studio (unified Control Plane) */}
               <Route
                 path="/agent-studio"
@@ -348,9 +364,10 @@ const App = () => (
               <Route path="/control-plane/registry" element={<Navigate to="/agent-studio" replace />} />
               <Route path="/control-plane/builder" element={<Navigate to="/agent-studio/create" replace />} />
               <Route path="/control-plane/rollouts" element={<Navigate to="/agent-studio?tab=deploy" replace />} />
-              
+
               <Route path="*" element={<NotFound />} />
               </Routes>
+              </Suspense>
               </ScopeProvider>
               </SystemProvider>
             </AuthProvider>
