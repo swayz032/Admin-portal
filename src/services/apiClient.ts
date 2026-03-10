@@ -1168,6 +1168,122 @@ export async function fetchAcquisitionAnalytics(): Promise<AcquisitionData> {
 }
 
 // ============================================================================
+// AUDIENCE INTELLIGENCE
+// ============================================================================
+type LabelCount = { label: string; count: number };
+
+export interface AudienceInsights {
+  totalProfiles: number;
+  completionRate: number;
+  topIndustry: string;
+  topCountry: string;
+  demographics: {
+    entityTypes: LabelCount[];
+    customerTypes: LabelCount[];
+    genders: LabelCount[];
+    revenueBands: LabelCount[];
+  };
+  acquisition: {
+    referralSources: LabelCount[];
+    salesChannels: LabelCount[];
+    signupsByMonth: Array<{ date: string; count: number }>;
+  };
+  needs: {
+    topServices: LabelCount[];
+    topGoals: LabelCount[];
+    topPainPoints: LabelCount[];
+    preferredChannels: LabelCount[];
+  };
+  geography: {
+    countries: LabelCount[];
+    states: LabelCount[];
+    cities: LabelCount[];
+  };
+}
+
+export async function fetchAudienceInsights(): Promise<AudienceInsights> {
+  const { data: profiles, error } = await supabase
+    .from('suite_profiles')
+    .select('*');
+
+  const empty: AudienceInsights = {
+    totalProfiles: 0, completionRate: 0, topIndustry: 'N/A', topCountry: 'N/A',
+    demographics: { entityTypes: [], customerTypes: [], genders: [], revenueBands: [] },
+    acquisition: { referralSources: [], salesChannels: [], signupsByMonth: [] },
+    needs: { topServices: [], topGoals: [], topPainPoints: [], preferredChannels: [] },
+    geography: { countries: [], states: [], cities: [] },
+  };
+
+  if (error || !profiles?.length) return empty;
+
+  const count = (arr: string[]): LabelCount[] => {
+    const m = new Map<string, number>();
+    for (const v of arr) if (v) m.set(v, (m.get(v) ?? 0) + 1);
+    return Array.from(m.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+  };
+
+  const meta = profiles.map(p => (p.metadata ?? {}) as Record<string, unknown>);
+
+  // Aggregate fields from metadata (graceful — missing keys produce empty arrays)
+  const industries = meta.map(m => String(m.industry ?? '')).filter(Boolean);
+  const countries = meta.map(m => String(m.country ?? '')).filter(Boolean);
+  const states = meta.map(m => String(m.state ?? '')).filter(Boolean);
+  const cities = meta.map(m => String(m.city ?? '')).filter(Boolean);
+  const entityTypes = meta.map(m => String(m.entity_type ?? '')).filter(Boolean);
+  const customerTypes = meta.map(m => String(m.customer_type ?? '')).filter(Boolean);
+  const genders = meta.map(m => String(m.gender ?? '')).filter(Boolean);
+  const revenueBands = meta.map(m => String(m.revenue_band ?? '')).filter(Boolean);
+  const referralSources = meta.map(m => String(m.referral_source ?? '')).filter(Boolean);
+  const salesChannels = meta.map(m => String(m.sales_channel ?? '')).filter(Boolean);
+  const services = meta.flatMap(m => Array.isArray(m.services_needed) ? m.services_needed.map(String) : []);
+  const goals = meta.flatMap(m => Array.isArray(m.goals) ? m.goals.map(String) : []);
+  const painPoints = meta.flatMap(m => Array.isArray(m.pain_points) ? m.pain_points.map(String) : []);
+  const channels = meta.map(m => String(m.preferred_channel ?? '')).filter(Boolean);
+
+  // Signups by month
+  const byMonth = new Map<string, number>();
+  for (const p of profiles) {
+    const d = (p.created_at as string)?.slice(0, 7);
+    if (d) byMonth.set(d, (byMonth.get(d) ?? 0) + 1);
+  }
+
+  const filled = meta.filter(m => Object.keys(m).length > 2).length;
+  const topInd = count(industries);
+  const topCty = count(countries);
+
+  return {
+    totalProfiles: profiles.length,
+    completionRate: profiles.length > 0 ? Math.round((filled / profiles.length) * 100) : 0,
+    topIndustry: topInd[0]?.label ?? 'N/A',
+    topCountry: topCty[0]?.label ?? 'N/A',
+    demographics: {
+      entityTypes: count(entityTypes),
+      customerTypes: count(customerTypes),
+      genders: count(genders),
+      revenueBands: count(revenueBands),
+    },
+    acquisition: {
+      referralSources: count(referralSources),
+      salesChannels: count(salesChannels),
+      signupsByMonth: Array.from(byMonth.entries()).map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date)),
+    },
+    needs: {
+      topServices: count(services),
+      topGoals: count(goals),
+      topPainPoints: count(painPoints),
+      preferredChannels: count(channels),
+    },
+    geography: {
+      countries: topCty,
+      states: count(states),
+      cities: count(cities),
+    },
+  };
+}
+
+// ============================================================================
 // TRUST SPINE CONTRACT FUNCTIONS (for Receipts, Outbox, ProviderCallLog pages)
 // These return contract types (snake_case)
 // ============================================================================
