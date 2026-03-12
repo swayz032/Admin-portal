@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getAdminToken } from '@/lib/adminAuth';
+import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 
 const POLL_INTERVAL_ACTIVE_MS = 2_000;
 const POLL_INTERVAL_IDLE_MS = 10_000;
@@ -54,11 +54,8 @@ export function useCouncilSession(sessionId: string | null): UseCouncilSessionRe
     if (!sessionId || !mountedRef.current) return;
 
     try {
-      const adminToken = getAdminToken();
-      const res = await fetch(`/api/admin/ops/council/${sessionId}`, {
-        headers: {
-          'X-Admin-Token': adminToken,
-        },
+      const res = await fetch(buildOpsFacadeUrl(`/admin/ops/council/${sessionId}`), {
+        headers: buildOpsHeaders({ includeJson: false, includeSuiteId: true }),
       });
 
       if (!res.ok) {

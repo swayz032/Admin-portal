@@ -19,13 +19,13 @@ import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import {
   useApprovals,
-  useIncidents,
   useReceipts,
   useCustomers,
   useBusinessMetrics,
   useOpsMetrics,
   useTrustSpineMetrics,
 } from '@/hooks/useAdminData';
+import { useUnifiedIncidents } from '@/hooks/useUnifiedIncidents';
 import type { Approval, Incident, Receipt } from '@/data/seed';
 import { formatDate, formatCurrency, formatTimeAgo, formatLatency, formatNumber } from '@/lib/formatters';
 import {
@@ -61,7 +61,7 @@ export default function Dashboard() {
 
   // Production data hooks — all querying real Supabase tables
   const { data: allApprovals, loading: approvalsLoading, error: approvalsError, refetch: refetchApprovals } = useApprovals();
-  const { data: allIncidents, loading: incidentsLoading, error: incidentsError } = useIncidents();
+  const { data: allIncidents, loading: incidentsLoading, error: incidentsError } = useUnifiedIncidents();
   const { data: allReceipts, loading: receiptsLoading, error: receiptsError } = useReceipts({ pageSize: 10 });
   const { data: allCustomers, loading: customersLoading, error: customersError } = useCustomers({ pageSize: 10 });
   const { data: ops, loading: opsLoading, error: opsError } = useOpsMetrics();

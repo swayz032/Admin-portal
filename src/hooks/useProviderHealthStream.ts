@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { useSSEStream } from './useSSEStream';
 import { getAdminToken } from '@/lib/adminAuth';
+import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 
 export type ProviderStatus = 'connected' | 'degraded' | 'disconnected';
 
@@ -32,9 +33,9 @@ export function useProviderHealthStream(): UseProviderHealthStreamResult {
 
   const adminToken = getAdminToken();
   const { lastEvent, status } = useSSEStream<ProviderHealth[] | ProviderHealth>({
-    url: '/api/admin/ops/providers/stream',
-    headers: { 'X-Admin-Token': adminToken },
-    enabled: true,
+    url: buildOpsFacadeUrl('/admin/ops/providers/stream'),
+    headers: buildOpsHeaders({ includeJson: false, includeSuiteId: true }),
+    enabled: !!adminToken,
   });
 
   useEffect(() => {

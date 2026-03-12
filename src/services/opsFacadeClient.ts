@@ -11,7 +11,11 @@
  */
 
 // Backend orchestrator URL — defaults to localhost:8000 for local dev
-const OPS_BASE_URL = import.meta.env.VITE_OPS_FACADE_URL ?? 'http://localhost:8000';
+const OPS_BASE_URL = (
+  import.meta.env.VITE_OPS_FACADE_URL ??
+  import.meta.env.VITE_API_BASE_URL ??
+  'http://localhost:8000'
+).replace(/\/+$/, '');
 
 // ============================================================================
 // TYPES — match backend response shapes
@@ -149,7 +153,7 @@ export interface OpsError {
 // CLIENT
 // ============================================================================
 
-import { getAdminToken, setAdminToken, clearAdminToken as clearToken } from '@/lib/adminAuth';
+import { getAdminToken, getSuiteId, setAdminToken, clearAdminToken as clearToken } from '@/lib/adminAuth';
 export { clearToken as clearAdminToken };
 
 // Re-export getAdminToken for backward compat
@@ -165,17 +169,72 @@ function getCorrelationId(): string {
   return crypto.randomUUID();
 }
 
-async function opsFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getAdminToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'x-correlation-id': getCorrelationId(),
-    ...(token ? { 'x-admin-token': token } : {}),
-  };
+export function getOpsFacadeBaseUrl(): string {
+  return OPS_BASE_URL;
+}
 
-  const response = await fetch(`${OPS_BASE_URL}${path}`, {
+export function buildOpsFacadeUrl(path: string): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${OPS_BASE_URL}${normalizedPath}`;
+}
+
+export function buildOpsHeaders(options?: {
+  includeJson?: boolean;
+  includeCorrelationId?: boolean;
+  includeAdminToken?: boolean;
+  includeSuiteId?: boolean;
+  extraHeaders?: Record<string, string | undefined>;
+}): Record<string, string> {
+  const {
+    includeJson = true,
+    includeCorrelationId = true,
+    includeAdminToken = true,
+    includeSuiteId = false,
+    extraHeaders = {},
+  } = options ?? {};
+
+  const headers: Record<string, string> = {};
+
+  if (includeJson) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  if (includeCorrelationId) {
+    const correlationId = getCorrelationId();
+    headers['X-Correlation-Id'] = correlationId;
+    headers['X-Trace-Id'] = correlationId;
+  }
+
+  if (includeAdminToken) {
+    const adminToken = getAdminToken();
+    if (adminToken) {
+      headers['X-Admin-Token'] = adminToken;
+    }
+  }
+
+  if (includeSuiteId) {
+    const suiteId = getSuiteId();
+    if (suiteId) {
+      headers['X-Suite-Id'] = suiteId;
+    }
+  }
+
+  for (const [key, value] of Object.entries(extraHeaders)) {
+    if (value) {
+      headers[key] = value;
+    }
+  }
+
+  return headers;
+}
+
+async function opsFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(buildOpsFacadeUrl(path), {
     ...init,
-    headers: { ...headers, ...(init?.headers as Record<string, string> ?? {}) },
+    headers: {
+      ...buildOpsHeaders(),
+      ...(init?.headers as Record<string, string> ?? {}),
+    },
   });
 
   if (!response.ok) {
@@ -217,11 +276,10 @@ export async function exchangeAdminToken(accessToken: string): Promise<AdminToke
     throw new OpsFacadeError('Missing access token for admin exchange', 'AUTH_REQUIRED', 401);
   }
 
-  const response = await fetch(`${OPS_BASE_URL}/admin/auth/exchange`, {
+  const response = await fetch(buildOpsFacadeUrl('/admin/auth/exchange'), {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'x-correlation-id': getCorrelationId(),
+      ...buildOpsHeaders({ includeAdminToken: false }),
       Authorization: `Bearer ${accessToken}`,
     },
   });

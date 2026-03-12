@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useSystem } from '@/contexts/SystemContext';
 import type { Incident } from '@/data/seed';
-import { useIncidents } from '@/hooks/useAdminData';
+import { useUnifiedIncidents } from '@/hooks/useUnifiedIncidents';
 import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatTimeAgo } from '@/lib/formatters';
@@ -24,7 +24,7 @@ import { AlertTriangle, Sparkles, ChevronDown, CheckCircle, Shield } from 'lucid
 
 export default function Incidents() {
   const { viewMode } = useSystem();
-  const { data: incidents, loading: incidentsLoading, error: incidentsError, refetch: refetchIncidents } = useIncidents();
+  const { data: incidents, loading: incidentsLoading, error: incidentsError, refetch: refetchIncidents } = useUnifiedIncidents();
   const [searchParams] = useSearchParams();
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [analysisDialog, setAnalysisDialog] = useState<Incident | null>(null);

@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getAdminToken } from '@/lib/adminAuth';
+import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 
 const POLL_INTERVAL_ACTIVE_MS = 2_000;
 
@@ -43,9 +43,8 @@ export function useRobotRun(runId: string | null): UseRobotRunResult {
     if (!runId || !mountedRef.current) return;
 
     try {
-      const adminToken = getAdminToken();
-      const res = await fetch(`/api/admin/ops/robots/${runId}`, {
-        headers: { 'X-Admin-Token': adminToken },
+      const res = await fetch(buildOpsFacadeUrl(`/admin/ops/robots/${runId}`), {
+        headers: buildOpsHeaders({ includeJson: false, includeSuiteId: true }),
       });
 
       if (!res.ok) throw new Error(`Robot API error: ${res.status}`);

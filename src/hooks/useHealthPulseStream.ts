@@ -5,7 +5,8 @@
  */
 
 import { useSSEStream } from './useSSEStream';
-import { getAdminToken, getSuiteId } from '@/lib/adminAuth';
+import { getAdminToken } from '@/lib/adminAuth';
+import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 
 export interface HealthPulse {
   status: 'healthy' | 'degraded' | 'critical';
@@ -19,14 +20,9 @@ export interface HealthPulse {
 
 export function useHealthPulseStream() {
   const adminToken = getAdminToken();
-  const suiteId = getSuiteId();
-
   const { lastEvent, status, error, reconnect, disconnect } = useSSEStream<HealthPulse>({
-    url: `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/admin/ops/health-pulse/stream`,
-    headers: {
-      'X-Admin-Token': adminToken,
-      'X-Suite-Id': suiteId,
-    },
+    url: buildOpsFacadeUrl('/admin/ops/health-pulse/stream'),
+    headers: buildOpsHeaders({ includeJson: false, includeSuiteId: true }),
     enabled: !!adminToken,
   });
 

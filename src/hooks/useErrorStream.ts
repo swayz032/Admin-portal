@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRealtimeIncidents } from './useRealtimeIncidents';
 import { useSSEStream } from './useSSEStream';
 import { getAdminToken } from '@/lib/adminAuth';
+import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 
 export type ErrorSource = 'frontend' | 'backend' | 'both';
 export type ErrorSeverity = 'P0' | 'P1' | 'P2' | 'P3';
@@ -53,9 +54,9 @@ export function useErrorStream(): UseErrorStreamResult {
     stack_trace?: string;
     provider?: string;
   }>({
-    url: '/api/admin/ops/incidents/stream',
-    headers: { 'X-Admin-Token': adminToken },
-    enabled: true,
+    url: buildOpsFacadeUrl('/admin/ops/incidents/stream'),
+    headers: buildOpsHeaders({ includeJson: false, includeSuiteId: true }),
+    enabled: !!adminToken,
   });
 
   // Rate-limited error addition

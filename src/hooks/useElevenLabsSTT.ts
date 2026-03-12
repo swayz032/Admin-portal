@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
-import { getAdminToken } from '@/lib/adminAuth';
+import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 
 interface UseElevenLabsSTTResult {
   isListening: boolean;
@@ -65,12 +65,9 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
           const formData = new FormData();
           formData.append('audio', blob, 'recording.webm');
 
-          const adminToken = getAdminToken();
-          const res = await fetch('/api/admin/ops/voice/stt', {
+          const res = await fetch(buildOpsFacadeUrl('/admin/ops/voice/stt'), {
             method: 'POST',
-            headers: {
-              'X-Admin-Token': adminToken,
-            },
+            headers: buildOpsHeaders({ includeJson: false }),
             body: formData,
           });
 

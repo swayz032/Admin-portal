@@ -4,7 +4,8 @@ import { HeroMetricCard } from '@/components/home/HeroMetricCard';
 import { PriorityActionList, PriorityAction } from '@/components/home/PriorityActionList';
 import { StoryInsightCard } from '@/components/home/StoryInsightCard';
 import { Panel } from '@/components/shared/Panel';
-import { useApprovals, useIncidents, useCustomers, useBusinessMetrics, useRunwayBurn } from '@/hooks/useAdminData';
+import { useApprovals, useCustomers, useBusinessMetrics, useRunwayBurn } from '@/hooks/useAdminData';
+import { useUnifiedIncidents } from '@/hooks/useUnifiedIncidents';
 import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatCurrency } from '@/lib/formatters';
@@ -33,7 +34,7 @@ export default function Home() {
   const { user } = useAuth();
   const { viewMode } = useSystem();
   const { data: approvals, loading: approvalsLoading } = useApprovals();
-  const { data: incidents, loading: incidentsLoading } = useIncidents();
+  const { data: incidents, loading: incidentsLoading } = useUnifiedIncidents();
   const { data: customers, loading: customersLoading } = useCustomers();
   const { data: rawBusinessMetrics, loading: metricsLoading } = useBusinessMetrics();
   const { data: rawRunwayBurn, loading: runwayLoading } = useRunwayBurn();
