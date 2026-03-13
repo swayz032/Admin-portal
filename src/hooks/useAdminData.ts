@@ -76,7 +76,9 @@ function useQuery<T>(
     try {
       const result = await fetcher();
       if (mountedRef.current) {
-        setState({ data: result.data, count: result.count, loading: false, error: null });
+        const rows = Array.isArray(result?.data) ? result.data : [];
+        const total = typeof result?.count === 'number' ? result.count : rows.length;
+        setState({ data: rows, count: total, loading: false, error: null });
       }
     } catch (err) {
       if (mountedRef.current) {

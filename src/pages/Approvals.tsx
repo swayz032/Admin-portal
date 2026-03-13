@@ -46,6 +46,7 @@ export default function Approvals() {
   const [approvalDialog, setApprovalDialog] = useState<{ approval: Approval; action: 'approve' | 'deny' } | null>(null);
   const [decisionReason, setDecisionReason] = useState('');
   const [showAllItems, setShowAllItems] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (approvalsLoading) return <PageLoadingState showKPIs rows={5} />;
   if (approvalsError) return <EmptyState variant="error" title="Failed to load approvals" description={approvalsError} actionLabel="Retry" onAction={refetchApprovals} />;
@@ -53,8 +54,6 @@ export default function Approvals() {
   const pendingApprovals = approvalsData.filter(a => a.status === 'Pending');
   const approvedApprovals = approvalsData.filter(a => a.status === 'Approved');
   const deniedApprovals = approvalsData.filter(a => a.status === 'Denied');
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleApprovalDecision = async () => {
     if (!approvalDialog) return;

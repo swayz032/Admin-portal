@@ -20,10 +20,7 @@ import { ModeText } from '@/components/shared/ModeText';
 import { ProviderHealthGrid } from '@/components/admin-ava/ProviderHealthGrid';
 import { useProviderHealthStream } from '@/hooks/useProviderHealthStream';
 
-const pendingConnections = [
-  { id: 'CONN-001', provider: 'GitHub', requestedBy: 'dev-team@zenith.io', requestedAt: '2026-01-08T08:00:00Z' },
-  { id: 'CONN-002', provider: 'PagerDuty', requestedBy: 'ops@zenith.io', requestedAt: '2026-01-07T16:30:00Z' },
-];
+const pendingConnections: Array<{ id: string; provider: string; requestedBy: string; requestedAt: string }> = [];
 
 type PendingApprovalRequest = {
   id: string;
@@ -48,13 +45,17 @@ export default function ConnectedApps() {
   if (providersLoading) return <PageLoadingState showKPIs rows={5} />;
   if (providersError) return <EmptyState variant="error" title="Failed to load connected apps" description={providersError} actionLabel="Retry" onAction={refetchProviders} />;
 
+  const providerList = Array.isArray(providers) ? providers : [];
+
   // Stats
-  const healthyProviders = providers.filter(p => p.status === 'Healthy').length;
-  const atRiskProviders = providers.filter(p => p.status === 'At Risk').length;
-  const avgLatency = Math.round(providers.reduce((sum, p) => sum + p.p95Latency, 0) / providers.length);
+  const healthyProviders = providerList.filter(p => p.status === 'Healthy').length;
+  const atRiskProviders = providerList.filter(p => p.status === 'At Risk').length;
+  const avgLatency = providerList.length > 0
+    ? Math.round(providerList.reduce((sum, p) => sum + p.p95Latency, 0) / providerList.length)
+    : 0;
 
   const quickStats = [
-    { label: 'connected', value: providers.length, status: 'success' as const },
+    { label: 'connected', value: providerList.length, status: 'success' as const },
     { label: 'healthy', value: healthyProviders, status: 'success' as const },
     { label: 'slow', value: atRiskProviders, status: atRiskProviders > 0 ? 'warning' as const : 'success' as const },
     { label: 'avg latency', value: `${avgLatency}ms` },
@@ -166,8 +167,8 @@ export default function ConnectedApps() {
         {/* Hero Section */}
         <PageHero
           title={viewMode === 'operator' 
-            ? `All ${providers.length} services connected and healthy`
-            : `${providers.length} providers connected`}
+            ? `All ${providerList.length} services connected and healthy`
+            : `${providerList.length} providers connected`}
           subtitle={viewMode === 'operator' 
             ? "View and manage your connected third-party services" 
             : "Manage provider integrations and connection health"}
@@ -188,14 +189,14 @@ export default function ConnectedApps() {
         {/* Story Insights */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <InsightPanel
-            headline={healthyProviders === providers.length ? "All services healthy" : `${healthyProviders} of ${providers.length} healthy`}
+            headline={healthyProviders === providerList.length ? "All services healthy" : `${healthyProviders} of ${providerList.length} healthy`}
             subtext={atRiskProviders > 0 ? `${atRiskProviders} running slow` : "No connection issues"}
             trend={atRiskProviders === 0 ? 'positive' : 'neutral'}
             icon={<CheckCircle className="h-5 w-5" />}
           />
           <InsightPanel
             headline="Stripe most active"
-            subtext={`${providers.find(p => p.name === 'Stripe')?.recentReceiptsCount || 0} actions this week`}
+            subtext={`${providerList.find(p => p.name === 'Stripe')?.recentReceiptsCount || 0} actions this week`}
             trend="positive"
             icon={<Zap className="h-5 w-5" />}
             linkTo="/activity?provider=Stripe"
@@ -221,7 +222,7 @@ export default function ConnectedApps() {
         <Panel title={viewMode === 'operator' ? "Your Services" : "Connected Providers"} noPadding>
           <DataTable
             columns={columns}
-            data={providers}
+            data={providerList}
             keyExtractor={(p: Provider) => p.id}
             onRowClick={(p) => setSelectedProvider(p)}
           />

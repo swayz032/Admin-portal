@@ -66,8 +66,10 @@ export function useRealtimeSubscription<T, R = Record<string, unknown>>({
     try {
       const result = await fetcher();
       if (mountedRef.current) {
-        setData(result.data);
-        setCount(result.count);
+        const rows = Array.isArray(result?.data) ? result.data : [];
+        const total = typeof result?.count === 'number' ? result.count : rows.length;
+        setData(rows);
+        setCount(total);
         setLoading(false);
       }
     } catch (err) {
