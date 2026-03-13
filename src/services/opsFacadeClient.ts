@@ -95,6 +95,9 @@ export interface OpsProviderStatus {
   p95_latency_ms: number;
   error_rate: number;
   webhook_error_rate: number;
+  rotation_mode?: 'automated' | 'manual_alerted' | 'infrastructure' | 'unknown';
+  secret_source?: string;
+  production_verified?: boolean;
 }
 
 export interface OpsWebhookDelivery {

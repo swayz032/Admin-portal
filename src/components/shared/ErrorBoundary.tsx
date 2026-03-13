@@ -1,5 +1,10 @@
 import React from 'react';
 import { devError } from '@/lib/devLog';
+import {
+  captureUnhandledRejection,
+  captureWindowError,
+  reportPortalIncident,
+} from '@/services/frontendIncidentReporter';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -18,14 +23,45 @@ interface ErrorBoundaryState {
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { hasError: false, error: null };
 
+  private readonly handleWindowError = (event: ErrorEvent): void => {
+    void captureWindowError(event).catch(() => {
+      // best effort only
+    });
+  };
+
+  private readonly handleUnhandledRejection = (event: PromiseRejectionEvent): void => {
+    void captureUnhandledRejection(event).catch(() => {
+      // best effort only
+    });
+  };
+
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
+  }
+
+  componentDidMount(): void {
+    window.addEventListener('error', this.handleWindowError);
+    window.addEventListener('unhandledrejection', this.handleUnhandledRejection);
+  }
+
+  componentWillUnmount(): void {
+    window.removeEventListener('error', this.handleWindowError);
+    window.removeEventListener('unhandledrejection', this.handleUnhandledRejection);
   }
 
   componentDidCatch(error: Error, _info: React.ErrorInfo): void {
     // devError is already no-op in production (Law #9 — never log PII)
     devError('[Aspire Admin] Render error:', error.message);
-    // In production, this would send to Sentry/observability
+    void reportPortalIncident({
+      kind: 'render_error',
+      title: 'Admin portal render error',
+      message: error.message,
+      stack: error.stack,
+      component: 'react_boundary',
+      severity: 'sev2',
+    }).catch(() => {
+      // best effort only
+    });
   }
 
   handleReset = (): void => {

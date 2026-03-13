@@ -148,6 +148,9 @@ export interface Provider {
   lastSyncTime?: string;
   recentReceiptsCount?: number;
   permissionsSummary?: string;
+  rotationMode?: 'automated' | 'manual_alerted' | 'infrastructure' | 'unknown';
+  secretSource?: string;
+  productionVerified?: boolean;
 }
 
 // Seed Data

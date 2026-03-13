@@ -291,6 +291,19 @@ export default function ConnectedApps() {
                 </div>
 
                 {viewMode === 'engineer' && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                      <p className="text-xs text-muted-foreground">Rotation Mode</p>
+                      <p className="text-sm">{selectedProvider.rotationMode?.replace(/_/g, ' ') || 'unknown'}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                      <p className="text-xs text-muted-foreground">Secret Source</p>
+                      <p className="text-sm">{selectedProvider.secretSource?.replace(/_/g, ' ') || 'unknown'}</p>
+                    </div>
+                  </div>
+                )}
+
+                {viewMode === 'engineer' && (
                   <div className="p-3 rounded-lg bg-muted/50 border border-border">
                     <p className="text-xs text-muted-foreground mb-1">Permissions</p>
                     <p className="text-sm">{selectedProvider.permissionsSummary}</p>

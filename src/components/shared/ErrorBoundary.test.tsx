@@ -8,8 +8,20 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { ErrorBoundary } from "./ErrorBoundary";
+
+const reporterMocks = vi.hoisted(() => ({
+  reportPortalIncident: vi.fn().mockResolvedValue(true),
+  captureWindowError: vi.fn().mockResolvedValue(true),
+  captureUnhandledRejection: vi.fn().mockResolvedValue(true),
+}));
+
+vi.mock("@/services/frontendIncidentReporter", () => ({
+  reportPortalIncident: reporterMocks.reportPortalIncident,
+  captureWindowError: reporterMocks.captureWindowError,
+  captureUnhandledRejection: reporterMocks.captureUnhandledRejection,
+}));
 
 // Component that throws on demand
 function ThrowingChild({ shouldThrow }: { shouldThrow: boolean }) {
@@ -23,6 +35,9 @@ describe("ErrorBoundary", () => {
   beforeEach(() => {
     // Suppress React error boundary console output in tests
     vi.spyOn(console, "error").mockImplementation(() => {});
+    reporterMocks.reportPortalIncident.mockClear();
+    reporterMocks.captureWindowError.mockClear();
+    reporterMocks.captureUnhandledRejection.mockClear();
   });
 
   it("renders children when no error", () => {
@@ -54,6 +69,26 @@ describe("ErrorBoundary", () => {
     expect(screen.getByText(/test error for boundary/i)).toBeInTheDocument();
   });
 
+  it("reports render errors to the backend incident path", async () => {
+    render(
+      <ErrorBoundary>
+        <ThrowingChild shouldThrow={true} />
+      </ErrorBoundary>
+    );
+
+    await waitFor(() => {
+      expect(reporterMocks.reportPortalIncident).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "render_error",
+          title: "Admin portal render error",
+          component: "react_boundary",
+          severity: "sev2",
+          message: "Test error for boundary",
+        })
+      );
+    });
+  });
+
   it("renders custom fallback when provided", () => {
     render(
       <ErrorBoundary fallback={<div data-testid="custom-fallback">Custom error</div>}>
@@ -81,5 +116,19 @@ describe("ErrorBoundary", () => {
       </ErrorBoundary>
     );
     expect(screen.getByText(/reload page/i)).toBeInTheDocument();
+  });
+
+  it("captures uncaught window errors", async () => {
+    render(
+      <ErrorBoundary>
+        <div>Safe child</div>
+      </ErrorBoundary>
+    );
+
+    window.dispatchEvent(new ErrorEvent("error", { message: "Window boom" }));
+
+    await waitFor(() => {
+      expect(reporterMocks.captureWindowError).toHaveBeenCalledTimes(1);
+    });
   });
 });

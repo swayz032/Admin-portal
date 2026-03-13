@@ -168,6 +168,45 @@ function useSingleQuery<T>(
   return { data, loading, error, refetch };
 }
 
+const PROVIDER_LABELS: Record<string, string> = {
+  openai: 'OpenAI',
+  elevenlabs: 'ElevenLabs',
+  deepgram: 'Deepgram',
+  livekit: 'LiveKit',
+  twilio: 'Twilio',
+  stripe: 'Stripe',
+  plaid: 'Plaid',
+  pandadoc: 'PandaDoc',
+  quickbooks: 'QuickBooks',
+  gusto: 'Gusto',
+  brave: 'Brave',
+  tavily: 'Tavily',
+  google_places: 'Google Places',
+  here: 'HERE',
+  foursquare: 'Foursquare',
+  mapbox: 'Mapbox',
+  tomtom: 'TomTom',
+  anam: 'Anam',
+  supabase: 'Supabase',
+  n8n: 'n8n',
+  railway: 'Railway',
+  secret_manager: 'AWS Secrets Manager',
+};
+
+function formatProviderName(providerId: string): string {
+  return PROVIDER_LABELS[providerId] ?? providerId.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+}
+
+function formatProviderLane(lane: string): string {
+  return lane.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+}
+
+function formatRotationMode(mode?: string): string {
+  if (!mode) return 'Unknown rotation';
+  if (mode === 'manual_alerted') return 'Manual alert rotation';
+  return mode.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+}
+
 // ============================================================================
 // DOMAIN HOOKS
 // ============================================================================
@@ -220,8 +259,8 @@ export function useProviders() {
         const facade = await fetchOpsProviders();
         const mapped: Provider[] = (facade.items ?? []).map((p) => ({
           id: p.provider,
-          name: p.provider,
-          type: p.lane || 'Unknown',
+          name: formatProviderName(p.provider),
+          type: p.lane ? formatProviderLane(p.lane) : 'Unknown',
           status: p.status === 'connected' ? 'Healthy' : p.status === 'degraded' ? 'At Risk' : 'Read-only Allowed',
           lastChecked: p.last_checked ?? '',
           latency: p.latency_ms ?? 0,
@@ -230,7 +269,13 @@ export function useProviders() {
           scopes: p.scopes ?? [],
           lastSyncTime: p.last_checked ?? '',
           recentReceiptsCount: 0,
-          permissionsSummary: (p.scopes ?? []).length > 0 ? `${(p.scopes ?? []).length} scopes connected` : 'No scopes configured',
+          permissionsSummary: [
+            p.rotation_mode ? `Rotation: ${formatRotationMode(p.rotation_mode)}` : null,
+            (p.scopes ?? []).length > 0 ? `${(p.scopes ?? []).length} scopes connected` : 'No scopes configured',
+          ].filter(Boolean).join(' · '),
+          rotationMode: p.rotation_mode ?? 'unknown',
+          secretSource: p.secret_source ?? 'unknown',
+          productionVerified: p.production_verified ?? false,
         }));
         return {
           data: mapped,
@@ -238,8 +283,12 @@ export function useProviders() {
           page: 1,
           pageSize: Math.max(mapped.length, 1),
         };
-      } catch {
-        return fetchProviders();
+      } catch (error) {
+        const allowLegacyFallback = import.meta.env.DEV || import.meta.env.VITE_ALLOW_LEGACY_PROVIDER_FALLBACK === 'true';
+        if (allowLegacyFallback) {
+          return fetchProviders();
+        }
+        throw error;
       }
     },
     [],
