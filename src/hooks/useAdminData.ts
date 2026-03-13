@@ -298,11 +298,8 @@ export function useProviders() {
           pageSize: Math.max(mapped.length, 1),
         };
       } catch (error) {
-        const allowLegacyFallback = import.meta.env.DEV || import.meta.env.VITE_ALLOW_LEGACY_PROVIDER_FALLBACK === 'true';
-        if (allowLegacyFallback) {
-          return fetchProviders();
-        }
-        throw error;
+        devWarn('Ops facade providers unavailable, falling back to Supabase provider query:', error);
+        return fetchProviders();
       }
     },
     [],
