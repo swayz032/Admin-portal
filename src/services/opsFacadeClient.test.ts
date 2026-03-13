@@ -43,6 +43,8 @@ describe('opsFacadeClient rotation summary', () => {
           infrastructure_count: 2,
           automated_providers: ['internal', 'openai', 'stripe', 'supabase', 'twilio'],
           manual_alerted_providers: ['gusto'],
+          manual_alerted_with_adapter_modules: ['deepgram', 'elevenlabs'],
+          manual_alerted_without_adapter_modules: ['gusto'],
           automation_gaps: {
             missing_adapter_modules: [],
             registry_automated_missing_from_terraform: [],

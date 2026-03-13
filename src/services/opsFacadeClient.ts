@@ -111,6 +111,8 @@ export interface OpsProviderRotationSummary {
   infrastructure_count: number;
   automated_providers: string[];
   manual_alerted_providers: string[];
+  manual_alerted_with_adapter_modules: string[];
+  manual_alerted_without_adapter_modules: string[];
   automation_gaps: {
     missing_adapter_modules: string[];
     registry_automated_missing_from_terraform: string[];

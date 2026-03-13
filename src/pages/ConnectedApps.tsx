@@ -59,6 +59,9 @@ export default function ConnectedApps() {
     { label: 'slow', value: atRiskProviders, status: atRiskProviders > 0 ? 'warning' as const : 'success' as const },
     { label: 'avg latency', value: `${avgLatency}ms` },
     ...(rotationSummary ? [{ label: 'auto-rotated', value: rotationSummary.automated_count }] : []),
+    ...(rotationSummary?.manual_alerted_with_adapter_modules?.length
+      ? [{ label: 'adapter-ready', value: rotationSummary.manual_alerted_with_adapter_modules.length }]
+      : []),
   ];
 
   const getStatusType = (status: Provider['status']) => {
@@ -204,6 +207,14 @@ export default function ConnectedApps() {
             trend={avgLatency < 200 ? 'positive' : 'neutral'}
             icon={<Plug className="h-5 w-5" />}
           />
+          {rotationSummary && (
+            <InsightPanel
+              headline={`${rotationSummary.manual_alerted_with_adapter_modules.length} providers adapter-ready`}
+              subtext={`${rotationSummary.manual_alerted_without_adapter_modules.length} still have no automation adapter`}
+              trend={rotationSummary.manual_alerted_without_adapter_modules.length > 0 ? 'neutral' : 'positive'}
+              icon={<AlertTriangle className="h-5 w-5" />}
+            />
+          )}
         </div>
 
         {/* Providers Table */}
