@@ -149,6 +149,11 @@ export interface Provider {
   recentReceiptsCount?: number;
   permissionsSummary?: string;
   rotationMode?: 'automated' | 'manual_alerted' | 'infrastructure' | 'unknown';
+  automationStatus?: string;
+  verificationSource?: string;
+  adapterType?: string;
+  adapterName?: string;
+  secretId?: string;
   secretSource?: string;
   productionVerified?: boolean;
 }

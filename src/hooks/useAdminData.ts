@@ -38,7 +38,7 @@ import {
   type AudienceInsights,
   fetchAudienceInsights,
 } from '@/services/apiClient';
-import { fetchOpsProviders } from '@/services/opsFacadeClient';
+import { fetchOpsProviderRotationSummary, fetchOpsProviders, type OpsProviderRotationSummary } from '@/services/opsFacadeClient';
 
 import type { Approval, Incident, Receipt, Customer, Subscription, Provider } from '@/data/seed';
 import type { AutomationJob, AutomationFailure } from '@/data/automationSeed';
@@ -188,6 +188,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   tomtom: 'TomTom',
   anam: 'Anam',
   supabase: 'Supabase',
+  internal: 'Internal Credentials',
   n8n: 'n8n',
   railway: 'Railway',
   secret_manager: 'AWS Secrets Manager',
@@ -205,6 +206,11 @@ function formatRotationMode(mode?: string): string {
   if (!mode) return 'Unknown rotation';
   if (mode === 'manual_alerted') return 'Manual alert rotation';
   return mode.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+}
+
+function formatAutomationStatus(status?: string): string {
+  if (!status) return 'Unknown automation state';
+  return status.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
 }
 
 // ============================================================================
@@ -271,9 +277,15 @@ export function useProviders() {
           recentReceiptsCount: 0,
           permissionsSummary: [
             p.rotation_mode ? `Rotation: ${formatRotationMode(p.rotation_mode)}` : null,
+            p.automation_status ? `Automation: ${formatAutomationStatus(p.automation_status)}` : null,
             (p.scopes ?? []).length > 0 ? `${(p.scopes ?? []).length} scopes connected` : 'No scopes configured',
           ].filter(Boolean).join(' · '),
           rotationMode: p.rotation_mode ?? 'unknown',
+          automationStatus: p.automation_status ?? 'unknown',
+          verificationSource: p.verification_source ?? 'unknown',
+          adapterType: p.adapter_type ?? 'unknown',
+          adapterName: p.adapter_name ?? '',
+          secretId: p.secret_id ?? '',
           secretSource: p.secret_source ?? 'unknown',
           productionVerified: p.production_verified ?? false,
         }));
@@ -296,6 +308,17 @@ export function useProviders() {
 }
 
 /** Business metrics aggregated from suite_profiles + receipts */
+export function useProviderRotationSummary() {
+  return useSingleQuery<OpsProviderRotationSummary>(
+    async () => {
+      const result = await fetchOpsProviderRotationSummary();
+      return result.summary;
+    },
+    [],
+    30000,
+  );
+}
+
 export function useBusinessMetrics() {
   return useSingleQuery<BusinessMetrics>(fetchBusinessMetrics, []);
 }

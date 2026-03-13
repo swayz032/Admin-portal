@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import type { Provider } from '@/data/seed';
-import { useProviders } from '@/hooks/useAdminData';
+import { useProviderRotationSummary, useProviders } from '@/hooks/useAdminData';
 import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatTimeAgo, formatLatency } from '@/lib/formatters';
@@ -36,6 +36,7 @@ type PendingApprovalRequest = {
 export default function ConnectedApps() {
   const { viewMode, systemState } = useSystem();
   const { data: providers, loading: providersLoading, error: providersError, refetch: refetchProviders } = useProviders();
+  const { data: rotationSummary } = useProviderRotationSummary();
   const { providers: liveProviders, isConnected: streamConnected, hasIssues: liveHasIssues } = useProviderHealthStream();
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [actionDialog, setActionDialog] = useState<{ provider: Provider; action: 'scope' | 'rotate' | 'disconnect' } | null>(null);
@@ -57,6 +58,7 @@ export default function ConnectedApps() {
     { label: 'healthy', value: healthyProviders, status: 'success' as const },
     { label: 'slow', value: atRiskProviders, status: atRiskProviders > 0 ? 'warning' as const : 'success' as const },
     { label: 'avg latency', value: `${avgLatency}ms` },
+    ...(rotationSummary ? [{ label: 'auto-rotated', value: rotationSummary.automated_count }] : []),
   ];
 
   const getStatusType = (status: Provider['status']) => {
@@ -297,8 +299,24 @@ export default function ConnectedApps() {
                       <p className="text-sm">{selectedProvider.rotationMode?.replace(/_/g, ' ') || 'unknown'}</p>
                     </div>
                     <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                      <p className="text-xs text-muted-foreground">Automation Status</p>
+                      <p className="text-sm">{selectedProvider.automationStatus?.replace(/_/g, ' ') || 'unknown'}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
                       <p className="text-xs text-muted-foreground">Secret Source</p>
                       <p className="text-sm">{selectedProvider.secretSource?.replace(/_/g, ' ') || 'unknown'}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                      <p className="text-xs text-muted-foreground">Verification Source</p>
+                      <p className="text-sm">{selectedProvider.verificationSource?.replace(/_/g, ' ') || 'unknown'}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                      <p className="text-xs text-muted-foreground">Adapter</p>
+                      <p className="text-sm">{selectedProvider.adapterName || selectedProvider.adapterType || 'unknown'}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                      <p className="text-xs text-muted-foreground">Secret ID</p>
+                      <p className="text-sm break-all">{selectedProvider.secretId || 'unknown'}</p>
                     </div>
                   </div>
                 )}

@@ -96,8 +96,26 @@ export interface OpsProviderStatus {
   error_rate: number;
   webhook_error_rate: number;
   rotation_mode?: 'automated' | 'manual_alerted' | 'infrastructure' | 'unknown';
+  automation_status?: string;
+  verification_source?: string;
+  adapter_type?: string;
+  adapter_name?: string;
+  secret_id?: string;
   secret_source?: string;
   production_verified?: boolean;
+}
+
+export interface OpsProviderRotationSummary {
+  automated_count: number;
+  manual_alerted_count: number;
+  infrastructure_count: number;
+  automated_providers: string[];
+  manual_alerted_providers: string[];
+  automation_gaps: {
+    missing_adapter_modules: string[];
+    registry_automated_missing_from_terraform: string[];
+    terraform_automated_missing_from_registry: string[];
+  };
 }
 
 export interface OpsWebhookDelivery {
@@ -416,6 +434,13 @@ export async function fetchOpsProviders(params?: {
   if (params?.status) search.set('status', params.status);
   const qs = search.toString();
   return opsFetch(`/admin/ops/providers${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchOpsProviderRotationSummary(): Promise<{
+  summary: OpsProviderRotationSummary;
+  server_time: string;
+}> {
+  return opsFetch('/admin/ops/providers/rotation-summary');
 }
 
 /** GET /admin/ops/webhooks — webhook delivery health */
