@@ -298,11 +298,15 @@ export function useProviders() {
           pageSize: Math.max(mapped.length, 1),
         };
       } catch (error) {
-        devWarn('Ops facade providers unavailable, falling back to Supabase provider query:', error);
+        if (import.meta.env.DEV) {
+          console.warn('Ops facade providers unavailable, falling back to Supabase provider query:', error);
+        }
         try {
           return await fetchProviders();
         } catch (fallbackError) {
-          devWarn('Supabase provider fallback failed:', fallbackError);
+          if (import.meta.env.DEV) {
+            console.warn('Supabase provider fallback failed:', fallbackError);
+          }
           return {
             data: [],
             count: 0,
