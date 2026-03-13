@@ -299,7 +299,17 @@ export function useProviders() {
         };
       } catch (error) {
         devWarn('Ops facade providers unavailable, falling back to Supabase provider query:', error);
-        return fetchProviders();
+        try {
+          return await fetchProviders();
+        } catch (fallbackError) {
+          devWarn('Supabase provider fallback failed:', fallbackError);
+          return {
+            data: [],
+            count: 0,
+            page: 1,
+            pageSize: 1,
+          };
+        }
       }
     },
     [],
