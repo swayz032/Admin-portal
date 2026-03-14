@@ -625,7 +625,7 @@ export async function fetchBusinessMetrics(): Promise<BusinessMetrics> {
   // Get failed payment-like receipts using schema-safe fields (domain may not exist in all deployments).
   const { data: failedReceipts, error: failedPaymentErr } = await supabase
     .from('receipts')
-    .select('status, action_type, payload, created_at')
+    .select('*')
     .eq('status', 'failed')
     .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
   const failedPaymentCount = failedPaymentErr
