@@ -622,13 +622,20 @@ export async function fetchBusinessMetrics(): Promise<BusinessMetrics> {
     ? Math.round((activeSuites.length / (activeSuites.length + trials.length)) * 100)
     : 0;
 
-  // Get failed payments from receipts
-  const { count: failedPaymentCount } = await supabase
+  // Get failed payment-like receipts using schema-safe fields (domain may not exist in all deployments).
+  const { data: failedReceipts, error: failedPaymentErr } = await supabase
     .from('receipts')
-    .select('id', { count: 'exact', head: true })
-    .eq('domain', 'payments')
+    .select('status, action_type, payload, created_at')
     .eq('status', 'failed')
     .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+  const failedPaymentCount = failedPaymentErr
+    ? 0
+    : (failedReceipts ?? []).filter((r) => {
+        const actionType = String((r as Record<string, unknown>).action_type ?? '').toLowerCase();
+        const payload = ((r as Record<string, unknown>).payload as Record<string, unknown> | undefined) ?? {};
+        const payloadDomain = String(payload.domain ?? '').toLowerCase();
+        return actionType.includes('payment') || payloadDomain === 'payments';
+      }).length;
 
   return {
     totalMRR,
@@ -637,7 +644,7 @@ export async function fetchBusinessMetrics(): Promise<BusinessMetrics> {
     newSubscriptions7d: newSubs,
     churnRate: 0,
     churn30d: 0,
-    failedPayments: { count: failedPaymentCount ?? 0, amount: 0 },
+    failedPayments: { count: failedPaymentCount, amount: 0 },
     trialConversion: trialConversions,
     refundsDisputes: { refunds: 0, disputes: 0, amount: 0 },
     expansionMRR: 0,
