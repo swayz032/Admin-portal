@@ -458,7 +458,7 @@ export async function fetchProviders(): Promise<PaginatedResult<Provider>> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data: callStats, error: callError } = await supabase
     .from('provider_call_log')
-    .select('provider, status, duration_ms')
+    .select('*')
     .gte('started_at', since);
 
   if (callError) {
@@ -472,7 +472,8 @@ export async function fetchProviders(): Promise<PaginatedResult<Provider>> {
     const existing = statsMap.get(key) ?? { total: 0, errors: 0, totalMs: 0, maxMs: 0 };
     existing.total++;
     if (call.status !== 'success') existing.errors++;
-    const ms = (call.duration_ms as number) ?? 0;
+    const callRecord = call as Record<string, unknown>;
+    const ms = Number(callRecord.duration_ms ?? callRecord.latency_ms ?? callRecord.elapsed_ms ?? 0) || 0;
     existing.totalMs += ms;
     existing.maxMs = Math.max(existing.maxMs, ms);
     statsMap.set(key, existing);
@@ -596,7 +597,7 @@ export async function fetchBusinessMetrics(): Promise<BusinessMetrics> {
   // Aggregate from suite_profiles
   const { data: suites, error: suitesErr } = await supabase
     .from('suite_profiles')
-    .select('status, mrr, plan, created_at');
+    .select('*');
 
   if (suitesErr) {
     devWarn('Business metrics query failed:', suitesErr.message);
@@ -604,8 +605,16 @@ export async function fetchBusinessMetrics(): Promise<BusinessMetrics> {
   }
 
   const allSuites = suites ?? [];
-  const activeSuites = allSuites.filter(s => (s.status as string) === 'active');
-  const totalMRR = activeSuites.reduce((sum, s) => sum + ((s.mrr as number) ?? 0), 0);
+  const activeSuites = allSuites.filter(s => {
+    const explicit = String(s.status ?? '').toLowerCase();
+    if (explicit === 'active') return true;
+    return Boolean((s as Record<string, unknown>).onboarding_completed_at);
+  });
+  const totalMRR = activeSuites.reduce((sum, s) => {
+    const metadata = ((s as Record<string, unknown>).metadata as Record<string, unknown> | undefined) ?? {};
+    const mrr = Number((s as Record<string, unknown>).mrr ?? metadata.mrr ?? 0);
+    return sum + (Number.isFinite(mrr) ? mrr : 0);
+  }, 0);
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const newSubs = allSuites.filter(s => (s.created_at as string) > sevenDaysAgo).length;
   const trials = allSuites.filter(s => (s.status as string) === 'trial');
@@ -797,7 +806,6 @@ export async function fetchAutomationFailures(filters?: {
   const { data, error, count } = await supabase
     .from('outbox_dead_letters')
     .select('*', { count: 'exact' })
-    .order('created_at', { ascending: false })
     .range(from, to);
 
   if (error) {
@@ -805,8 +813,14 @@ export async function fetchAutomationFailures(filters?: {
     return { data: [], count: 0, page, pageSize };
   }
 
+  const sorted = [...(data ?? [])].sort((a, b) => {
+    const aTs = String((a as Record<string, unknown>).created_at ?? (a as Record<string, unknown>).failed_at ?? '');
+    const bTs = String((b as Record<string, unknown>).created_at ?? (b as Record<string, unknown>).failed_at ?? '');
+    return bTs.localeCompare(aTs);
+  });
+
   return {
-    data: (data ?? []).map(row => ({
+    data: sorted.map(row => ({
       id: row.id as string,
       jobId: (row.original_job_id as string) ?? '',
       jobType: (row.action_type as string) ?? '',
@@ -843,7 +857,7 @@ export interface AutomationMetricsData {
 export async function fetchAutomationMetrics(): Promise<AutomationMetricsData> {
   const { data: jobs, error } = await supabase
     .from('outbox_jobs')
-    .select('status, attempts, created_at, started_at, finished_at');
+    .select('*');
 
   if (error) {
     devWarn('Automation metrics query failed:', error.message);
@@ -977,7 +991,7 @@ export async function fetchCostsUsage(): Promise<CostsUsageData> {
 
   const { data: calls, error } = await supabase
     .from('provider_call_log')
-    .select('provider, status, duration_ms, started_at')
+    .select('*')
     .gte('started_at', thirtyDaysAgo);
 
   if (error || !calls?.length) {
@@ -991,7 +1005,8 @@ export async function fetchCostsUsage(): Promise<CostsUsageData> {
     const existing = byProvider.get(key) ?? { calls: 0, errors: 0, totalMs: 0 };
     existing.calls++;
     if (call.status !== 'success') existing.errors++;
-    existing.totalMs += (call.duration_ms as number) ?? 0;
+    const callRecord = call as Record<string, unknown>;
+    existing.totalMs += Number(callRecord.duration_ms ?? callRecord.latency_ms ?? callRecord.elapsed_ms ?? 0) || 0;
     byProvider.set(key, existing);
   }
 
