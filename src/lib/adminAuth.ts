@@ -12,12 +12,12 @@ const TOKEN_KEY = 'aspire_admin_token';
 const SUITE_KEY = 'aspire.admin.scope.suiteId';
 
 /**
- * Read admin JWT — tries sessionStorage first (primary), falls back to localStorage.
+ * Read admin JWT from sessionStorage only (cleared on tab close = secure).
  * Returns empty string if not found (fail-closed: empty token = 401).
  */
 export function getAdminToken(): string {
   try {
-    return sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY) ?? '';
+    return sessionStorage.getItem(TOKEN_KEY) ?? '';
   } catch {
     return '';
   }
@@ -35,19 +35,15 @@ export function getSuiteId(): string {
 }
 
 /**
- * Write admin JWT to BOTH session and local storage.
- * SessionStorage = primary (cleared on tab close = secure).
- * LocalStorage = fallback for SSE hooks that read synchronously.
+ * Write admin JWT to sessionStorage only (cleared on tab close = secure).
  */
 export function setAdminToken(token: string): void {
   sessionStorage.setItem(TOKEN_KEY, token);
-  localStorage.setItem(TOKEN_KEY, token);
 }
 
 /**
- * Clear admin JWT from both storages.
+ * Clear admin JWT from sessionStorage.
  */
 export function clearAdminToken(): void {
   sessionStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(TOKEN_KEY);
 }
