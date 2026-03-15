@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import type { Customer } from '@/data/seed';
-import { useCustomers } from '@/hooks/useAdminData';
+import { useRealtimeCustomers } from '@/hooks/useRealtimeCustomers';
 import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatCurrency, formatTimeAgo, formatDateShort } from '@/lib/formatters';
@@ -75,7 +75,7 @@ function TagList({ items, emptyText = 'None' }: { items: string[] | undefined; e
 
 export default function Customers() {
   const { viewMode } = useSystem();
-  const { data: customers, loading: customersLoading, error: customersError, refetch: refetchCustomers } = useCustomers();
+  const { data: customers, loading: customersLoading, error: customersError, refetch: refetchCustomers } = useRealtimeCustomers();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);

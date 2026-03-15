@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useSystem } from '@/contexts/SystemContext';
 import { Panel } from '@/components/shared/Panel';
 import { DataTable } from '@/components/shared/DataTable';
@@ -7,19 +7,20 @@ import { PurposeStrip } from '@/components/shared/PurposeStrip';
 import { SystemPipelineCard } from '@/components/shared/SystemPipelineCard';
 import { ModeText } from '@/components/shared/ModeText';
 import { Button } from '@/components/ui/button';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { OutboxJob, OutboxJobStatus } from '@/contracts';
 import { listOutboxJobs } from '@/services/apiClient';
+import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { formatTimeAgo } from '@/lib/formatters';
-import { 
-  Inbox, 
+import {
+  Inbox,
   RefreshCw,
   Clock,
   CheckCircle,
@@ -29,24 +30,14 @@ import {
 
 export default function Outbox() {
   const { viewMode } = useSystem();
-  const [jobs, setJobs] = useState<OutboxJob[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: jobs, loading, refetch: loadJobs } = useRealtimeSubscription<OutboxJob>({
+    table: 'outbox_jobs',
+    events: ['INSERT', 'UPDATE'],
+    fetcher: () => listOutboxJobs(),
+    getKey: (item) => item.id,
+  });
   const [selectedJob, setSelectedJob] = useState<OutboxJob | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-
-  useEffect(() => {
-    loadJobs();
-  }, []);
-
-  const loadJobs = async () => {
-    setLoading(true);
-    try {
-      const data = await listOutboxJobs();
-      setJobs(data.data ?? []);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const filteredJobs = jobs.filter(j => {
     if (statusFilter !== 'all' && j.status !== statusFilter) return false;

@@ -287,14 +287,14 @@ export function AdminAvaChatProvider({ children }: { children: ReactNode }) {
             : responseMeta.patchJobId ? 'patch'
             : responseMeta.robotRunId ? 'robot'
             : 'text',
-        content: responseContent || 'I processed your request.',
+        content: responseContent || "I'm ready for your next step.",
         timestamp: now(),
         meta: responseMeta,
       };
       setMessages(prev => prev.map(m => (m.id === thinkingId ? avaMsg : m)));
 
       // Add to ops desk transcript
-      opsDesk.addTranscriptEntry('Ava', responseContent || 'I processed your request.');
+      opsDesk.addTranscriptEntry('Ava', responseContent || "I'm ready for your next step.");
 
       // Add receipt if present
       if (responseMeta.receiptId) {

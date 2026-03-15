@@ -194,7 +194,7 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
         if (!res.ok) throw new Error(`Orchestrator error: ${res.status}`);
 
         const data = await res.json() as { response?: string; text?: string };
-        const responseText = data.response || data.text || 'I processed your request.';
+        const responseText = data.response || data.text || "I'm ready for your next step.";
 
         setLastAvaResponse(responseText);
 

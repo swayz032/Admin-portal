@@ -18,13 +18,13 @@ import { useSystem } from '@/contexts/SystemContext';
 import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import {
-  useApprovals,
-  useReceipts,
-  useCustomers,
   useBusinessMetrics,
   useOpsMetrics,
   useTrustSpineMetrics,
 } from '@/hooks/useAdminData';
+import { useRealtimeApprovals } from '@/hooks/useRealtimeApprovals';
+import { useRealtimeReceipts } from '@/hooks/useRealtimeReceipts';
+import { useRealtimeCustomers } from '@/hooks/useRealtimeCustomers';
 import { useUnifiedIncidents } from '@/hooks/useUnifiedIncidents';
 import type { Approval, Incident, Receipt } from '@/data/seed';
 import { formatDate, formatCurrency, formatTimeAgo, formatLatency, formatNumber } from '@/lib/formatters';
@@ -59,11 +59,11 @@ export default function Dashboard() {
   const [decisionReason, setDecisionReason] = useState('');
   const [analysisDialog, setAnalysisDialog] = useState<Incident | null>(null);
 
-  // Production data hooks — all querying real Supabase tables
-  const { data: allApprovals, loading: approvalsLoading, error: approvalsError, refetch: refetchApprovals } = useApprovals();
+  // Production data hooks — realtime subscriptions for live updates
+  const { data: allApprovals, loading: approvalsLoading, error: approvalsError, refetch: refetchApprovals } = useRealtimeApprovals();
   const { data: allIncidents, loading: incidentsLoading, error: incidentsError } = useUnifiedIncidents();
-  const { data: allReceipts, loading: receiptsLoading, error: receiptsError } = useReceipts({ pageSize: 10 });
-  const { data: allCustomers, loading: customersLoading, error: customersError } = useCustomers({ pageSize: 10 });
+  const { data: allReceipts, loading: receiptsLoading, error: receiptsError } = useRealtimeReceipts({ pageSize: 10 });
+  const { data: allCustomers, loading: customersLoading, error: customersError } = useRealtimeCustomers({ pageSize: 10 });
   const { data: ops, loading: opsLoading, error: opsError } = useOpsMetrics();
   const { data: biz, loading: bizLoading, error: bizError } = useBusinessMetrics();
   const { data: trustSpine, loading: trustLoading } = useTrustSpineMetrics();

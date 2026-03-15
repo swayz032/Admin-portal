@@ -307,12 +307,11 @@ export function useProviders() {
           if (import.meta.env.DEV) {
             console.warn('Supabase provider fallback failed:', fallbackError);
           }
-          return {
-            data: [],
-            count: 0,
-            page: 1,
-            pageSize: 1,
-          };
+          const primaryMessage = error instanceof Error ? error.message : 'unknown facade error';
+          const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : 'unknown supabase error';
+          throw new Error(
+            `Provider health unavailable: ops facade failed (${primaryMessage}); supabase fallback failed (${fallbackMessage})`,
+          );
         }
       }
     },

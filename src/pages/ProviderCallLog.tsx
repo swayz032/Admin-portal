@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useSystem } from '@/contexts/SystemContext';
 import { Panel } from '@/components/shared/Panel';
 import { DataTable } from '@/components/shared/DataTable';
@@ -8,19 +8,20 @@ import { SystemPipelineCard } from '@/components/shared/SystemPipelineCard';
 import { ModeText } from '@/components/shared/ModeText';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ProviderCallLog, ProviderCallStatus } from '@/contracts';
 import { listProviderCallLogs } from '@/services/apiClient';
+import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { formatTimeAgo } from '@/lib/formatters';
-import { 
-  Server, 
+import {
+  Server,
   Search,
   Clock,
   CheckCircle,
@@ -31,26 +32,16 @@ import {
 
 export default function ProviderCallLogPage() {
   const { viewMode } = useSystem();
-  const [logs, setLogs] = useState<ProviderCallLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: logs, loading } = useRealtimeSubscription<ProviderCallLog>({
+    table: 'provider_call_log',
+    events: ['INSERT', 'UPDATE'],
+    fetcher: () => listProviderCallLogs(),
+    getKey: (item) => item.id,
+  });
   const [selectedLog, setSelectedLog] = useState<ProviderCallLog | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [providerFilter, setProviderFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
-
-  useEffect(() => {
-    loadLogs();
-  }, []);
-
-  const loadLogs = async () => {
-    setLoading(true);
-    try {
-      const data = await listProviderCallLogs();
-      setLogs(data.data ?? []);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const filteredLogs = logs.filter(l => {
     if (statusFilter !== 'all' && l.status !== statusFilter) return false;
