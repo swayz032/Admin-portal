@@ -55,6 +55,7 @@ export interface PaginatedResult<T> {
   pageSize: number;
 }
 
+// TODO: evaluate removal — ApiError is not imported by any consumer
 export class ApiError extends Error {
   constructor(message: string, public code?: string) {
     super(message);
@@ -1339,6 +1340,7 @@ export async function listReceipts(filters?: ReceiptFilters): Promise<PaginatedR
   };
 }
 
+// TODO: evaluate removal — listAuthorityQueue is not imported by any consumer
 export async function listAuthorityQueue(filters?: AuthorityQueueFilters): Promise<PaginatedResult<AuthorityQueueItem>> {
   let query = supabase
     .from('approval_requests')
@@ -1403,6 +1405,7 @@ export async function listProviderCallLogs(filters?: ProviderCallLogFilters): Pr
   };
 }
 
+// TODO: evaluate removal — listIncidents is not imported by any consumer
 export async function listIncidents(filters?: IncidentFilters): Promise<PaginatedResult<TrustIncident>> {
   const result = await fetchIncidents({
     severity: filters?.severity,
@@ -1442,6 +1445,7 @@ export async function listIncidents(filters?: IncidentFilters): Promise<Paginate
   };
 }
 
+// TODO: evaluate removal — listProviders is not imported by any consumer
 export async function listProviders(): Promise<ProviderInfo[]> {
   const result = await fetchProviders();
   return result.data.map(p => ({

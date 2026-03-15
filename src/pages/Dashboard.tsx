@@ -27,6 +27,7 @@ import { submitApprovalDecision } from '@/services/opsFacadeClient';
 import { useRealtimeReceipts } from '@/hooks/useRealtimeReceipts';
 import { useRealtimeCustomers } from '@/hooks/useRealtimeCustomers';
 import { useUnifiedIncidents } from '@/hooks/useUnifiedIncidents';
+import { ProviderHealthGrid } from '@/components/admin-ava/ProviderHealthGrid';
 import type { Approval, Incident, Receipt } from '@/data/seed';
 import { formatDate, formatCurrency, formatTimeAgo, formatLatency, formatNumber } from '@/lib/formatters';
 import {
@@ -475,6 +476,18 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+
+              {/* Provider Health — live SSE stream */}
+              <Panel
+                title={viewMode === 'operator' ? "Connected Services Health" : "Provider Health (Live)"}
+                action={
+                  <Link to="/connected-apps" className="text-xs text-primary hover:underline">
+                    View all
+                  </Link>
+                }
+              >
+                <ProviderHealthGrid />
+              </Panel>
 
               {/* Main Panels */}
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
