@@ -25,6 +25,9 @@ import {
   Server,
   Bot,
   Plus,
+  DollarSign,
+  Video,
+  Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -73,6 +76,12 @@ const businessControlItems = [
   { to: '/business/audience', icon: Users, label: 'Audience' },
 ];
 
+const visibilityItems = [
+  { to: '/visibility/finance', icon: DollarSign, label: 'Finance', engineerLabel: 'Finance Receipts' },
+  { to: '/visibility/conference', icon: Video, label: 'Conferences', engineerLabel: 'Conference Monitor' },
+  { to: '/visibility/mail', icon: Mail, label: 'Mail', engineerLabel: 'Mail Visibility' },
+];
+
 const skillPackItems = [
   { to: '/skill-packs/registry', icon: Package, label: 'Registry' },
   { to: '/skill-packs/analytics', icon: Cpu, label: 'Analytics' },
@@ -92,6 +101,7 @@ export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
   );
   const [businessOpen, setBusinessOpen] = useState(location.pathname.startsWith('/business'));
   const [skillPacksOpen, setSkillPacksOpen] = useState(location.pathname.startsWith('/skill-packs'));
+  const [visibilityOpen, setVisibilityOpen] = useState(location.pathname.startsWith('/visibility'));
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, JSON.stringify(isCollapsed));
@@ -321,6 +331,17 @@ export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
           {isCollapsed && <div className="pt-2" />}
           {renderNavItem({ to: '/agent-studio', icon: Bot, label: 'Agent Studio' })}
           {renderNavItem({ to: '/agent-studio/create', icon: Plus, label: 'Create Agent' })}
+
+          {/* Visibility section */}
+          {!isCollapsed && (
+            <div className="pt-3 pb-1">
+              <p className="px-3 text-[10px] font-medium text-muted-foreground/50 uppercase tracking-widest">
+                Visibility
+              </p>
+            </div>
+          )}
+          {isCollapsed && <div className="pt-2" />}
+          {renderCollapsibleGroup('Visibility', visibilityItems, visibilityOpen, setVisibilityOpen)}
 
           {/* Business section */}
           {viewMode === 'operator' && (

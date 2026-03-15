@@ -12,6 +12,13 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    proxy: {
+      '/api': {
+        target: process.env.VITE_OPS_FACADE_URL || process.env.VITE_API_BASE_URL || 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (p: string) => p.replace(/^\/api/, ''),
+      },
+    },
   },
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),

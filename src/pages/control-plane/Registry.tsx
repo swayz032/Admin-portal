@@ -8,7 +8,7 @@ import {
   RegistryItemType, 
   RiskTier 
 } from '@/contracts/control-plane';
-import { listRegistryItems } from '@/services/controlPlaneClient';
+import { listRegistryItems } from '@/services/registryClient';
 import { Panel } from '@/components/shared/Panel';
 import { DataTable } from '@/components/shared/DataTable';
 import { StatusChip } from '@/components/shared/StatusChip';

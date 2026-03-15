@@ -50,9 +50,16 @@ const AudienceIntelligence = lazy(() => import("./pages/business/AudienceIntelli
 const SkillPackRegistry = lazy(() => import("./pages/skillpacks/Registry"));
 const SkillPackAnalytics = lazy(() => import("./pages/skillpacks/Analytics"));
 
+// Cross-System Visibility pages
+const FinanceView = lazy(() => import("./pages/FinanceView"));
+const ConferenceMonitor = lazy(() => import("./pages/ConferenceMonitor"));
+const MailVisibility = lazy(() => import("./pages/MailVisibility"));
+
 // Control Plane pages
 const AgentStudio = lazy(() => import("./pages/AgentStudio"));
 const CreateAgent = lazy(() => import("./pages/control-plane/Builder"));
+const RobotRunPage = lazy(() => import("./pages/control-plane/RobotRunPage"));
+const PatchJobPage = lazy(() => import("./pages/control-plane/PatchJobPage"));
 
 function PageLoader() {
   return (
@@ -315,6 +322,38 @@ const App = () => (
               />
 
 
+              {/* Cross-System Visibility Routes */}
+              <Route
+                path="/visibility/finance"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <FinanceView />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/visibility/conference"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <ConferenceMonitor />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/visibility/mail"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <MailVisibility />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+
               {/* Skill Packs Routes */}
               <Route
                 path="/skill-packs/registry"
@@ -355,6 +394,27 @@ const App = () => (
                   <ProtectedRoute>
                     <AppLayout>
                       <CreateAgent />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              {/* Control Plane Detail Routes */}
+              <Route
+                path="/control-plane/robots/:id"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <RobotRunPage />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/control-plane/patches/:id"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <PatchJobPage />
                     </AppLayout>
                   </ProtectedRoute>
                 }

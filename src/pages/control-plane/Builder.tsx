@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useSystem } from '@/contexts/SystemContext';
 import { BuilderState, DEFAULT_BUILDER_STATE, DEFAULT_CAPABILITIES } from '@/contracts/control-plane';
-import { createDraftRegistryItem, getBuilderModelPolicy, proposeConfigChange, setBuilderModelPolicy } from '@/services/controlPlaneClient';
+import { createDraftRegistryItem, getBuilderModelPolicy, proposeConfigChange, setBuilderModelPolicy } from '@/services/registryClient';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {

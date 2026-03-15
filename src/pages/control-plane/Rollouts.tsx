@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useSystem } from '@/contexts/SystemContext';
 import { Rollout, RolloutStatus, RolloutEnvironment } from '@/contracts/control-plane';
-import { 
-  listRollouts, 
-  setRolloutPercentage, 
-  pauseRollout, 
-  rollbackRollout 
-} from '@/services/controlPlaneClient';
+import {
+  listRollouts,
+  setRolloutPercentage,
+  pauseRollout,
+  rollbackRollout
+} from '@/services/registryClient';
 import { Panel } from '@/components/shared/Panel';
 import { DataTable } from '@/components/shared/DataTable';
 import { StatusChip } from '@/components/shared/StatusChip';
