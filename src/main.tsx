@@ -1,3 +1,9 @@
+import { initSentry } from "./lib/sentry";
+
+// Initialize Sentry BEFORE React render — captures startup errors.
+// No-op if VITE_SENTRY_DSN is not set (Law #9: PII stripped in beforeSend).
+initSentry();
+
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
