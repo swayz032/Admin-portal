@@ -32,6 +32,7 @@ export default defineConfig(({ mode }) => ({
   build: {
     chunkSizeWarningLimit: 900,
     rollupOptions: {
+      external: ['@sentry/react'],
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
