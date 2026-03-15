@@ -7,6 +7,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { devError } from '@/lib/devLog';
 import { fetchOpsModelPolicy, updateOpsModelPolicy } from './opsFacadeClient';
 import type {
   RegistryItem,
@@ -83,7 +84,7 @@ export async function listRegistryItems(filters?: RegistryFilters): Promise<Regi
   const { data, error } = await query.order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Failed to fetch registry items:', error.message);
+    devError('Failed to fetch registry items:', error.message);
     return [];
   }
 
@@ -211,7 +212,7 @@ export async function listRollouts(filters?: RolloutFilters): Promise<Rollout[]>
   const { data, error } = await query.order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Failed to fetch rollouts:', error.message);
+    devError('Failed to fetch rollouts:', error.message);
     return [];
   }
 
@@ -370,7 +371,7 @@ export async function listProposals(statusFilter?: string): Promise<ConfigChange
   const { data, error } = await query.order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Failed to fetch proposals:', error.message);
+    devError('Failed to fetch proposals:', error.message);
     return [];
   }
 

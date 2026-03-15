@@ -24,7 +24,7 @@ export function PersonaOrb({ state, size = 280, className }: PersonaOrbProps) {
       videoRef.current.muted = true;
       videoRef.current.loop = true;
       videoRef.current.playsInline = true;
-      videoRef.current.play().catch(() => {});
+      videoRef.current.play().catch(() => { /* autoplay blocked by browser policy */ });
     }
   }, []);
 
@@ -84,7 +84,7 @@ export function MiniOrb({ size = 28, className }: { size?: number; className?: s
       videoRef.current.muted = true;
       videoRef.current.loop = true;
       videoRef.current.playsInline = true;
-      videoRef.current.play().catch(() => {});
+      videoRef.current.play().catch(() => { /* autoplay blocked by browser policy */ });
     }
   }, []);
 

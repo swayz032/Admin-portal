@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KPICard } from '@/components/shared/KPICard';
@@ -23,6 +23,7 @@ import {
   useTrustSpineMetrics,
 } from '@/hooks/useAdminData';
 import { useRealtimeApprovals } from '@/hooks/useRealtimeApprovals';
+import { submitApprovalDecision } from '@/services/opsFacadeClient';
 import { useRealtimeReceipts } from '@/hooks/useRealtimeReceipts';
 import { useRealtimeCustomers } from '@/hooks/useRealtimeCustomers';
 import { useUnifiedIncidents } from '@/hooks/useUnifiedIncidents';
@@ -58,6 +59,7 @@ export default function Dashboard() {
   const [approvalDialog, setApprovalDialog] = useState<{ approval: Approval; action: 'approve' | 'deny' } | null>(null);
   const [decisionReason, setDecisionReason] = useState('');
   const [analysisDialog, setAnalysisDialog] = useState<Incident | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Production data hooks — realtime subscriptions for live updates
   const { data: allApprovals, loading: approvalsLoading, error: approvalsError, refetch: refetchApprovals } = useRealtimeApprovals();
@@ -84,12 +86,26 @@ export default function Dashboard() {
   const policyBlocks24h = allReceipts.filter(r => r.outcome === 'Blocked').length;
   const providerErrors24h = allReceipts.filter(r => r.outcome === 'Failed').length;
 
-  const handleApprovalDecision = () => {
-    // TODO: Wire to Supabase approval_events insert + refetch
-    setApprovalDialog(null);
-    setDecisionReason('');
-    refetchApprovals();
-  };
+  const handleApprovalDecision = useCallback(async () => {
+    if (!approvalDialog) return;
+
+    const decision = approvalDialog.action === 'approve' ? 'approved' : 'denied';
+    setIsSubmitting(true);
+    try {
+      await submitApprovalDecision(
+        approvalDialog.approval.id,
+        decision as 'approved' | 'denied',
+        decisionReason || undefined,
+      );
+      refetchApprovals();
+    } catch (_err) {
+      refetchApprovals();
+    } finally {
+      setIsSubmitting(false);
+      setApprovalDialog(null);
+      setDecisionReason('');
+    }
+  }, [approvalDialog, decisionReason, refetchApprovals]);
 
   const handleAnalyze = (incident: Incident) => {
     setAnalysisDialog(incident);
@@ -791,10 +807,10 @@ export default function Dashboard() {
             </Button>
             <Button
               onClick={handleApprovalDecision}
-              disabled={!decisionReason.trim()}
+              disabled={!decisionReason.trim() || isSubmitting}
               className={approvalDialog?.action === 'deny' ? 'bg-destructive hover:bg-destructive/90' : ''}
             >
-              {approvalDialog?.action === 'approve' ? 'Approve' : 'Deny'}
+              {isSubmitting ? 'Submitting...' : approvalDialog?.action === 'approve' ? 'Approve' : 'Deny'}
             </Button>
           </DialogFooter>
         </DialogContent>

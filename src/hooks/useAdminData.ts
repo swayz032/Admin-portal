@@ -39,6 +39,7 @@ import {
   fetchAudienceInsights,
 } from '@/services/apiClient';
 import { fetchOpsProviderRotationSummary, fetchOpsProviders, type OpsProviderRotationSummary } from '@/services/opsFacadeClient';
+import { devWarn } from '@/lib/devLog';
 
 import type { Approval, Incident, Receipt, Customer, Subscription, Provider } from '@/data/seed';
 import type { AutomationJob, AutomationFailure } from '@/data/automationSeed';
@@ -299,13 +300,13 @@ export function useProviders() {
         };
       } catch (error) {
         if (import.meta.env.DEV) {
-          console.warn('Ops facade providers unavailable, falling back to Supabase provider query:', error);
+          devWarn('Ops facade providers unavailable, falling back to Supabase provider query:', error);
         }
         try {
           return await fetchProviders();
         } catch (fallbackError) {
           if (import.meta.env.DEV) {
-            console.warn('Supabase provider fallback failed:', fallbackError);
+            devWarn('Supabase provider fallback failed:', fallbackError);
           }
           const primaryMessage = error instanceof Error ? error.message : 'unknown facade error';
           const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : 'unknown supabase error';

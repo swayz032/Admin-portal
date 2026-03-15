@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSystem } from '@/contexts/SystemContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,7 +23,9 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { devError } from '@/lib/devLog';
 import { tools } from '@/ecosystem/snapshot';
+import { listRegistryItems } from '@/services/registryClient';
 
 interface CustomAgent {
   id: string;
@@ -34,8 +36,6 @@ interface CustomAgent {
   tools: string[];
   created_at: string;
 }
-
-const MOCK_CUSTOM_AGENTS: CustomAgent[] = [];
 
 const STEPS = [
   { id: 'purpose', label: 'Purpose', icon: Bot, description: 'Name and describe your agent' },
@@ -71,7 +71,25 @@ const riskTierConfig = {
 export function CustomAgentsTab() {
   const { viewMode } = useSystem();
   const isOperator = viewMode === 'operator';
-  const [agents] = useState<CustomAgent[]>(MOCK_CUSTOM_AGENTS);
+  const [agents, setAgents] = useState<CustomAgent[]>([]);
+
+  useEffect(() => {
+    listRegistryItems({ type: 'agent' })
+      .then((items) => {
+        setAgents(items.map((item) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          status: item.status === 'active' ? 'active' : item.status === 'pending_review' ? 'proposed' : 'draft',
+          risk_tier: item.risk_tier,
+          tools: item.tool_allowlist,
+          created_at: item.created_at,
+        })));
+      })
+      .catch((err) => {
+        devError('Failed to fetch custom agents:', err);
+      });
+  }, []);
   const [createOpen, setCreateOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({

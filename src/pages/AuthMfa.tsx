@@ -124,9 +124,10 @@ export default function AuthMfa() {
       setSecret(enrollData.totp.secret);
       setEnrollFactorId(enrollData.id);
       setStep('enroll');
-    } catch (err: any) {
+    } catch (err: unknown) {
       devError('MFA detect error:', err);
-      setError(err?.message || 'Failed to initialize MFA.');
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message || 'Failed to initialize MFA.');
       setStep('verify'); // fallback
     }
   };
@@ -159,9 +160,10 @@ export default function AuthMfa() {
       setEnrollFactorId(enrollData.id);
       setVerifyFactorId('');
       setStep('enroll');
-    } catch (err: any) {
+    } catch (err: unknown) {
       devError('MFA reset error:', err);
-      setError(err?.message || 'Failed to reset MFA. Please try again.');
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message || 'Failed to reset MFA. Please try again.');
       setStep('verify');
     }
   };
@@ -198,8 +200,9 @@ export default function AuthMfa() {
       resetRateLimit();
       await refreshSession();
       navigate('/home');
-    } catch (err: any) {
-      setError(err?.message || 'Verification failed.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message || 'Verification failed.');
       setIsLoading(false);
     }
   };
@@ -236,8 +239,9 @@ export default function AuthMfa() {
       resetRateLimit();
       await refreshSession();
       navigate('/home');
-    } catch (err: any) {
-      setError(err?.message || 'Verification failed.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message || 'Verification failed.');
       setIsLoading(false);
     }
   };

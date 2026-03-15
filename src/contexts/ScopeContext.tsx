@@ -72,6 +72,18 @@ interface ScopeContextType {
   refresh: () => void;
 }
 
+interface SuiteProfileRow {
+  suite_id: string;
+  display_id: string;
+  office_display_id: string;
+  business_name: string;
+  owner_name: string;
+  email: string;
+  industry: string | null;
+  created_at: string;
+  [key: string]: unknown;
+}
+
 const ScopeContext = createContext<ScopeContextType | undefined>(undefined);
 
 const SCOPE_SUITE_KEY = 'aspire.admin.scope.suiteId';
@@ -125,20 +137,21 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
         offices: ScopeOffice[];
       }>();
 
-      for (const row of data) {
-        const suiteId = (row as any).suite_id as string;
-        const displayId = (row as any).display_id as string || '';
-        const officeDisplayId = (row as any).office_display_id as string || '';
+      for (const rawRow of data) {
+        const row = rawRow as SuiteProfileRow;
+        const suiteId = row.suite_id;
+        const displayId = row.display_id || '';
+        const officeDisplayId = row.office_display_id || '';
 
         if (!suiteMap.has(suiteId)) {
           suiteMap.set(suiteId, {
             suiteId,
             displayId,
-            businessName: (row as any).business_name as string || 'Unknown',
-            ownerName: (row as any).owner_name as string || '',
-            ownerEmail: (row as any).email as string || '',
-            industry: (row as any).industry as string | null,
-            createdAt: (row as any).created_at as string || '',
+            businessName: row.business_name || 'Unknown',
+            ownerName: row.owner_name || '',
+            ownerEmail: row.email || '',
+            industry: row.industry,
+            createdAt: row.created_at || '',
             officeCount: 0,
             offices: [],
           });
@@ -151,7 +164,7 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
           suiteId,
           label: `Office ${officeDisplayId || suite.officeCount}`,
           displayId: officeDisplayId,
-          ownerName: (row as any).owner_name as string || '',
+          ownerName: row.owner_name || '',
           role: 'owner', // suite_profiles has one row per suite — always the owner
         });
       }
@@ -219,14 +232,17 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
         .order('office_display_id', { ascending: true })
         .then(({ data }) => {
           if (data) {
-            setOffices(data.map((row: any, idx: number) => ({
-              id: `${row.suite_id}:${row.office_display_id || idx}`,
-              suiteId: row.suite_id,
-              label: `Office ${row.office_display_id || idx + 1}`,
-              displayId: row.office_display_id || '',
-              ownerName: row.owner_name || '',
-              role: 'owner',
-            })));
+            setOffices(data.map((rawRow: unknown, idx: number) => {
+              const row = rawRow as SuiteProfileRow;
+              return {
+                id: `${row.suite_id}:${row.office_display_id || idx}`,
+                suiteId: row.suite_id,
+                label: `Office ${row.office_display_id || idx + 1}`,
+                displayId: row.office_display_id || '',
+                ownerName: row.owner_name || '',
+                role: 'owner',
+              };
+            }));
           }
         });
     } else {

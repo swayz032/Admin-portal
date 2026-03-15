@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSystem } from '@/contexts/SystemContext';
 import type { StaffRuntimeConfig } from '@/contracts/ecosystem';
 import { staff } from '@/ecosystem/snapshot';
@@ -22,7 +22,9 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { devError } from '@/lib/devLog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { listRollouts } from '@/services/registryClient';
 
 interface DeployTabProps {
   configs: StaffRuntimeConfig[];
@@ -37,46 +39,6 @@ interface RolloutEntry {
   updated_by: string;
   history: { timestamp: string; action: string; actor: string; percentage: number }[];
 }
-
-// Realistic mock data
-const MOCK_ROLLOUTS: RolloutEntry[] = [
-  {
-    staff_id: 'sarah',
-    environment: 'production',
-    percentage: 100,
-    status: 'active',
-    updated_at: '2024-01-15T14:30:00Z',
-    updated_by: 'admin@company.com',
-    history: [
-      { timestamp: '2024-01-15T14:30:00Z', action: 'Rolled out to 100%', actor: 'admin@company.com', percentage: 100 },
-      { timestamp: '2024-01-14T10:00:00Z', action: 'Rolled out to 50%', actor: 'admin@company.com', percentage: 50 },
-      { timestamp: '2024-01-13T09:00:00Z', action: 'Created rollout', actor: 'admin@company.com', percentage: 10 },
-    ]
-  },
-  {
-    staff_id: 'quinn',
-    environment: 'production',
-    percentage: 75,
-    status: 'active',
-    updated_at: '2024-01-14T11:00:00Z',
-    updated_by: 'admin@company.com',
-    history: [
-      { timestamp: '2024-01-14T11:00:00Z', action: 'Rolled out to 75%', actor: 'admin@company.com', percentage: 75 },
-      { timestamp: '2024-01-12T15:00:00Z', action: 'Created rollout', actor: 'admin@company.com', percentage: 25 },
-    ]
-  },
-  {
-    staff_id: 'eli',
-    environment: 'staging',
-    percentage: 100,
-    status: 'active',
-    updated_at: '2024-01-10T09:00:00Z',
-    updated_by: 'admin@company.com',
-    history: [
-      { timestamp: '2024-01-10T09:00:00Z', action: 'Created rollout', actor: 'admin@company.com', percentage: 100 },
-    ]
-  },
-];
 
 const statusLabels = {
   active: { label: 'Active', color: 'bg-success/20 text-success border-success/30' },
@@ -95,7 +57,30 @@ export function DeployTab({ configs }: DeployTabProps) {
   const isOperator = viewMode === 'operator';
   const safetyMode = systemState.safetyMode;
   
-  const [rollouts] = useState<RolloutEntry[]>(MOCK_ROLLOUTS);
+  const [rollouts, setRollouts] = useState<RolloutEntry[]>([]);
+
+  useEffect(() => {
+    listRollouts()
+      .then((items) => {
+        setRollouts(items.map((item) => ({
+          staff_id: item.registry_item_name?.toLowerCase() || item.registry_item_id,
+          environment: item.environment as RolloutEntry['environment'],
+          percentage: item.percentage,
+          status: item.status as RolloutEntry['status'],
+          updated_at: item.updated_at,
+          updated_by: item.created_by,
+          history: (item.history || []).map((h) => ({
+            timestamp: h.timestamp,
+            action: h.action,
+            actor: h.actor,
+            percentage: h.percentage,
+          })),
+        })));
+      })
+      .catch((err) => {
+        devError('Failed to fetch rollouts:', err);
+      });
+  }, []);
   const [selectedRollout, setSelectedRollout] = useState<RolloutEntry | null>(null);
   const [newPercentage, setNewPercentage] = useState<number>(0);
 

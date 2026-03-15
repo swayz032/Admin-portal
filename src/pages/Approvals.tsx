@@ -20,6 +20,7 @@ import type { Approval, Receipt } from '@/data/seed';
 import { useRealtimeApprovals } from '@/hooks/useRealtimeApprovals';
 import { useRealtimeReceipts } from '@/hooks/useRealtimeReceipts';
 import { submitApprovalDecision } from '@/services/opsFacadeClient';
+import { devError } from '@/lib/devLog';
 import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatDate, formatTimeAgo } from '@/lib/formatters';
@@ -102,7 +103,7 @@ export default function Approvals() {
       setLocalReceipts(prev => [newReceipt, ...prev]);
     } catch (err) {
       // Fail closed (Law #3): backend error = decision NOT persisted, show error
-      console.error('Approval decision failed:', err);
+      devError('Approval decision failed:', err);
       // Refetch to get authoritative state
       refetchApprovals();
     } finally {
