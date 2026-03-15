@@ -10,7 +10,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "gen-types": "bash scripts/gen-types.sh",
+    "check-types": "bash scripts/gen-types.sh --check"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -86,6 +88,7 @@
     "globals": "^15.15.0",
     "jsdom": "^28.1.0",
     "lovable-tagger": "^1.1.13",
+    "openapi-typescript": "^7.13.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",
