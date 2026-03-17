@@ -28,6 +28,10 @@ import {
   DollarSign,
   Video,
   Mail,
+  GitBranch,
+  Monitor,
+  HeartPulse,
+  BarChart2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -58,11 +62,14 @@ const operationsItems = [
   { to: '/automation', icon: Zap, label: 'Automation' },
   { to: '/safety', icon: Shield, label: 'Safety' },
   { to: '/incidents', icon: AlertTriangle, label: 'Incidents' },
+  { to: '/system-health', icon: HeartPulse, label: 'Health', engineerLabel: 'System Health' },
+  { to: '/metrics', icon: BarChart2, label: 'Metrics', engineerLabel: 'Metrics' },
 ];
 
 const platformItems = [
   { to: '/connected-apps', icon: Plug, label: 'Services', engineerLabel: 'Providers' },
   { to: '/provider-call-log', icon: Server, label: 'Call Log', engineerLabel: 'Provider Logs' },
+  { to: '/client-events', icon: Monitor, label: 'Client Events', engineerLabel: 'Client Events' },
   { to: '/customers', icon: Users, label: 'Customers' },
   { to: '/subscriptions', icon: CreditCard, label: 'Billing', engineerLabel: 'Subscriptions' },
   { to: '/advanced', icon: Settings, label: 'Settings', engineerLabel: 'Advanced' },

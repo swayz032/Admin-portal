@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useSystem } from '@/contexts/SystemContext';
 import { Panel } from '@/components/shared/Panel';
 import { DataTable } from '@/components/shared/DataTable';
@@ -27,7 +28,8 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
-  Timer
+  Timer,
+  ExternalLink,
 } from 'lucide-react';
 
 export default function ProviderCallLogPage() {
@@ -142,11 +144,19 @@ export default function ProviderCallLogPage() {
         </span>
       )
     },
-    { 
-      key: 'correlation_id', 
-      header: 'Correlation ID', 
+    {
+      key: 'correlation_id',
+      header: 'Correlation ID',
       render: (l: ProviderCallLog) => (
-        <span className="font-mono text-xs text-primary">{l.correlation_id.slice(0, 16)}...</span>
+        <Link
+          to={`/trace/${l.correlation_id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="font-mono text-xs text-primary hover:underline flex items-center gap-1"
+          title={`View trace for ${l.correlation_id}`}
+        >
+          {l.correlation_id.slice(0, 16)}...
+          <ExternalLink className="h-3 w-3" />
+        </Link>
       )
     },
   ];
@@ -291,7 +301,13 @@ export default function ProviderCallLogPage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Correlation ID</span>
-                        <code className="text-xs bg-surface-2 px-2 py-1 rounded text-primary">{selectedLog.correlation_id}</code>
+                        <Link
+                          to={`/trace/${selectedLog.correlation_id}`}
+                          className="text-xs bg-surface-2 px-2 py-1 rounded font-mono text-primary hover:bg-surface-3 flex items-center gap-1"
+                        >
+                          {selectedLog.correlation_id}
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
                       </div>
                     </div>
 

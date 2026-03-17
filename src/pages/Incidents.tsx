@@ -20,7 +20,7 @@ import { useUnifiedIncidents } from '@/hooks/useUnifiedIncidents';
 import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatTimeAgo } from '@/lib/formatters';
-import { AlertTriangle, Sparkles, ChevronDown, CheckCircle, Shield } from 'lucide-react';
+import { AlertTriangle, Sparkles, ChevronDown, CheckCircle, Shield, GitBranch } from 'lucide-react';
 
 export default function Incidents() {
   const { viewMode } = useSystem();
@@ -214,7 +214,7 @@ export default function Incidents() {
                 </div>
               )}
               
-              <div className="pt-4 border-t border-border flex gap-2">
+              <div className="pt-4 border-t border-border flex gap-2 flex-wrap">
                 <Button size="sm" onClick={() => setAnalysisDialog(selectedIncident)}>
                   <Sparkles className="h-4 w-4 mr-2" />
                   <ModeText operator="Get help" engineer="Analyze" />
@@ -224,6 +224,14 @@ export default function Incidents() {
                     Talk to Ava
                   </Link>
                 </Button>
+                {selectedIncident.correlationId && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to={`/trace/${selectedIncident.correlationId}`}>
+                      <GitBranch className="h-4 w-4 mr-2" />
+                      View Trace
+                    </Link>
+                  </Button>
+                )}
               </div>
             </div>
           )}

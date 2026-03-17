@@ -27,6 +27,7 @@ import { submitApprovalDecision } from '@/services/opsFacadeClient';
 import { useRealtimeReceipts } from '@/hooks/useRealtimeReceipts';
 import { useRealtimeCustomers } from '@/hooks/useRealtimeCustomers';
 import { useUnifiedIncidents } from '@/hooks/useUnifiedIncidents';
+import { useCommandCenterMetrics } from '@/hooks/useCommandCenterMetrics';
 import { ProviderHealthGrid } from '@/components/admin-ava/ProviderHealthGrid';
 import type { Approval, Incident, Receipt } from '@/data/seed';
 import { formatDate, formatCurrency, formatTimeAgo, formatLatency, formatNumber } from '@/lib/formatters';
@@ -70,6 +71,7 @@ export default function Dashboard() {
   const { data: ops, loading: opsLoading, error: opsError } = useOpsMetrics();
   const { data: biz, loading: bizLoading, error: bizError } = useBusinessMetrics();
   const { data: trustSpine, loading: trustLoading } = useTrustSpineMetrics();
+  const { data: cmdMetrics } = useCommandCenterMetrics();
 
   // Derived data
   const pendingApprovals = allApprovals.filter(a => a.status === 'Pending');
@@ -361,6 +363,45 @@ export default function Dashboard() {
                   status={ops.errorBudget.remaining > 50 ? 'success' : ops.errorBudget.remaining > 20 ? 'warning' : 'critical'}
                 />
               </div>
+
+              {/* Command Center KPIs */}
+              {cmdMetrics && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <KPICard
+                    title={viewMode === 'operator' ? 'Total Receipts' : 'Receipt Volume'}
+                    value={formatNumber(cmdMetrics.receipts_total)}
+                    subtitle={`${formatNumber(cmdMetrics.receipts_24h)} in 24h`}
+                    icon={<FileText className="h-4 w-4" />}
+                    status="info"
+                    linkTo="/receipts"
+                    linkLabel="View receipts"
+                  />
+                  <KPICard
+                    title={viewMode === 'operator' ? 'Provider Calls' : 'Provider Calls (24h)'}
+                    value={formatNumber(cmdMetrics.provider_calls_24h)}
+                    subtitle={`${cmdMetrics.provider_success_rate.toFixed(1)}% success`}
+                    icon={<Server className="h-4 w-4" />}
+                    status={cmdMetrics.provider_success_rate >= 99 ? 'success' : cmdMetrics.provider_success_rate >= 95 ? 'warning' : 'critical'}
+                    linkTo="/provider-call-log"
+                  />
+                  <KPICard
+                    title={viewMode === 'operator' ? 'Avg Response Time' : 'Provider Avg Latency'}
+                    value={`${cmdMetrics.provider_avg_latency_ms.toFixed(0)}ms`}
+                    icon={<Clock className="h-4 w-4" />}
+                    status={cmdMetrics.provider_avg_latency_ms <= 200 ? 'success' : cmdMetrics.provider_avg_latency_ms <= 500 ? 'warning' : 'critical'}
+                    linkTo="/metrics"
+                    linkLabel="View metrics"
+                  />
+                  <KPICard
+                    title={viewMode === 'operator' ? 'Waiting for Review' : 'Pending Approvals'}
+                    value={cmdMetrics.approvals_pending}
+                    icon={<Inbox className="h-4 w-4" />}
+                    status={cmdMetrics.approvals_pending > 5 ? 'warning' : 'success'}
+                    linkTo="/approvals"
+                    linkLabel="Review"
+                  />
+                </div>
+              )}
 
               {/* LLM Ops Desk Shortcut Card */}
               <Panel className="border-primary/30 bg-primary/5">

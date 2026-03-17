@@ -5,6 +5,7 @@ import { useSystem } from '@/contexts/SystemContext';
 import { AlertTriangle } from 'lucide-react';
 import { AvaFloatingButton } from '@/components/ava/AvaFloatingButton';
 import { ProviderAlertBanner } from '@/components/admin-ava/ProviderAlertBanner';
+import { SystemStatusBanner } from '@/components/shared/SystemStatusBanner';
 import { useRealtimeApprovals } from '@/hooks/useRealtimeApprovals';
 import { useRealtimeIncidents } from '@/hooks/useRealtimeIncidents';
 
@@ -43,6 +44,9 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
         <Header onMenuClick={() => setSidebarOpen(true)} />
+
+        {/* System-wide status banner */}
+        <SystemStatusBanner />
 
         {/* Provider degradation/disconnection alert */}
         <ProviderAlertBanner />

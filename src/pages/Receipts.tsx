@@ -178,17 +178,19 @@ export default function Receipts() {
         <StatusChip status={getStatusColor(r.status)} label={r.status} />
       ) 
     },
-    { 
-      key: 'correlation_id', 
+    {
+      key: 'correlation_id',
       header: 'Correlation ID',
       render: (r: Receipt) => (
-        <button 
-          onClick={(e) => { e.stopPropagation(); copyToClipboard(r.correlation_id); }}
+        <Link
+          to={`/trace/${r.correlation_id}`}
+          onClick={(e) => e.stopPropagation()}
           className="font-mono text-xs text-primary hover:underline flex items-center gap-1"
+          title={`View trace for ${r.correlation_id}`}
         >
           {r.correlation_id.slice(0, 12)}...
-          {copiedId === r.correlation_id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-        </button>
+          <ExternalLink className="h-3 w-3" />
+        </Link>
       )
     },
   ];
@@ -352,13 +354,13 @@ export default function Receipts() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Correlation ID</span>
-                        <button
-                          onClick={() => copyToClipboard(selectedReceipt.correlation_id)}
+                        <Link
+                          to={`/trace/${selectedReceipt.correlation_id}`}
                           className="text-xs bg-surface-2 px-2 py-1 rounded font-mono text-primary hover:bg-surface-3 flex items-center gap-1"
                         >
                           {selectedReceipt.correlation_id}
-                          {copiedId === selectedReceipt.correlation_id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                        </button>
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
                       </div>
                       {selectedReceipt.request_id && (
                         <div className="flex items-center justify-between">

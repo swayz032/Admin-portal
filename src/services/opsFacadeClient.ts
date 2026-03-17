@@ -173,6 +173,56 @@ export interface OpsError {
 }
 
 // ============================================================================
+// COMMAND CENTER TYPES
+// ============================================================================
+
+export interface OpsDeepHealthCheck {
+  name: string;
+  status: 'ok' | 'degraded' | 'down';
+  latency_ms?: number;
+  error?: string;
+}
+
+export interface OpsDeepHealthResponse {
+  status: 'healthy' | 'degraded' | 'critical';
+  checks: Record<string, OpsDeepHealthCheck>;
+  server_time: string;
+}
+
+export interface OpsDashboardIncidentBreakdown {
+  p0: number;
+  p1: number;
+  p2: number;
+  p3: number;
+}
+
+export interface OpsDashboardProviderBreakdown {
+  provider: string;
+  calls_24h: number;
+  success_rate: number;
+  avg_latency_ms: number;
+}
+
+export interface OpsDashboardMetrics {
+  receipts_total: number;
+  receipts_24h: number;
+  receipts_failed_24h: number;
+  incidents_open: number;
+  incidents_by_severity: OpsDashboardIncidentBreakdown;
+  provider_calls_24h: number;
+  provider_success_rate: number;
+  provider_avg_latency_ms: number;
+  provider_breakdown: OpsDashboardProviderBreakdown[];
+  approvals_pending: number;
+  system_status: 'healthy' | 'degraded' | 'critical';
+}
+
+export interface OpsDashboardMetricsResponse {
+  metrics: OpsDashboardMetrics;
+  server_time: string;
+}
+
+// ============================================================================
 // CLIENT
 // ============================================================================
 
@@ -497,6 +547,41 @@ export async function submitApprovalDecision(
     method: 'POST',
     body: JSON.stringify({ decision, reason }),
   });
+}
+
+// ============================================================================
+// TRACE TYPES
+// ============================================================================
+
+export interface OpsTraceEvent {
+  type: string;
+  timestamp: string;
+  data: Record<string, unknown>;
+}
+
+export interface OpsTraceResponse {
+  trace_id: string;
+  event_count: number;
+  events: OpsTraceEvent[];
+}
+
+/** GET /admin/ops/trace/:correlationId — distributed trace timeline */
+export async function fetchOpsTrace(correlationId: string): Promise<OpsTraceResponse> {
+  return opsFetch<OpsTraceResponse>(`/admin/ops/trace/${encodeURIComponent(correlationId)}`);
+}
+
+// ============================================================================
+// COMMAND CENTER ENDPOINTS
+// ============================================================================
+
+/** GET /admin/ops/health/deep — dependency health check */
+export async function fetchOpsDeepHealth(): Promise<OpsDeepHealthResponse> {
+  return opsFetch<OpsDeepHealthResponse>('/admin/ops/health/deep');
+}
+
+/** GET /admin/ops/dashboard/metrics — aggregated dashboard metrics */
+export async function fetchOpsDashboardMetrics(): Promise<OpsDashboardMetricsResponse> {
+  return opsFetch<OpsDashboardMetricsResponse>('/admin/ops/dashboard/metrics');
 }
 
 /** Check if the ops facade backend is reachable */

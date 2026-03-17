@@ -34,10 +34,16 @@ const AuthMfa = lazy(() => import("./pages/AuthMfa"));
 const AccessDenied = lazy(() => import("./pages/AccessDenied"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
+// Command Center pages
+const SystemHealth = lazy(() => import("./pages/SystemHealth"));
+const Metrics = lazy(() => import("./pages/Metrics"));
+
 // Trust Spine pages
 const Receipts = lazy(() => import("./pages/Receipts"));
 const Outbox = lazy(() => import("./pages/Outbox"));
 const ProviderCallLog = lazy(() => import("./pages/ProviderCallLog"));
+const TraceView = lazy(() => import("./pages/TraceView"));
+const ClientEvents = lazy(() => import("./pages/ClientEvents"));
 
 // Business Control pages
 const RunwayBurn = lazy(() => import("./pages/business/RunwayBurn"));
@@ -237,6 +243,28 @@ const App = () => (
                 }
               />
 
+              {/* Command Center Pages */}
+              <Route
+                path="/system-health"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <SystemHealth />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/metrics"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <Metrics />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+
               {/* Trust Spine Pages */}
               <Route
                 path="/receipts"
@@ -264,6 +292,26 @@ const App = () => (
                   <ProtectedRoute>
                     <AppLayout>
                       <ProviderCallLog />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/trace/:correlationId"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <TraceView />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/client-events"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <ClientEvents />
                     </AppLayout>
                   </ProtectedRoute>
                 }
