@@ -1,14 +1,15 @@
 /**
- * Realtime incidents hook — drop-in replacement for useIncidents().
+ * Realtime incidents hook — aggregated pipeline incidents.
  *
- * Subscribes to `receipts` table (status=failed/blocked) via Supabase Realtime.
- * Incidents are derived from failed/blocked receipts — not a separate table.
- * Returns the same { data, loading, error, count, refetch } interface.
+ * Uses fetchIncidents() which aggregates receipts by category (idempotent).
+ * Subscribes to receipts table for live refresh on new failures.
+ * n8n receipts excluded — they go to /n8n-operations.
  */
 
-import { useRealtimeSubscription } from './useRealtimeSubscription';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { fetchIncidents, type PaginatedResult } from '@/services/apiClient';
-import type { Incident, IncidentNote } from '@/data/seed';
+import type { Incident } from '@/data/seed';
 
 interface IncidentFilters {
   severity?: string;
@@ -17,85 +18,65 @@ interface IncidentFilters {
   pageSize?: number;
 }
 
-function deriveSeverity(row: Record<string, unknown>): 'P0' | 'P1' | 'P2' | 'P3' {
-  const payload = (row.payload as Record<string, unknown>) ?? {};
-  if (payload.severity) return payload.severity as 'P0' | 'P1' | 'P2' | 'P3';
-
-  const domain = (row.domain as string) ?? '';
-  const status = (row.status as string) ?? '';
-
-  if (domain === 'payments' && status === 'failed') return 'P1';
-  if (domain === 'security') return 'P0';
-  if (status === 'blocked') return 'P2';
-  return 'P3';
-}
-
-function buildIncidentNotes(payload: Record<string, unknown>): IncidentNote[] {
-  const notes: IncidentNote[] = [];
-  if (payload.error_message) {
-    notes.push({
-      author: 'System',
-      body: payload.error_message as string,
-      timestamp: new Date().toISOString(),
-    });
-  }
-  if (payload.stack_trace) {
-    notes.push({
-      author: 'System',
-      body: `Stack trace:\n${payload.stack_trace as string}`,
-      timestamp: new Date().toISOString(),
-      isLLMAnalysis: false,
-    });
-  }
-  return notes;
-}
-
-function mapIncidentRow(row: Record<string, unknown>): Incident {
-  const payload = (row.payload as Record<string, unknown>) ?? {};
-  const status = (row.status as string) ?? 'failed';
-
-  return {
-    id: row.id as string,
-    severity: deriveSeverity(row),
-    status: status === 'failed' || status === 'blocked' ? 'Open' : 'Resolved',
-    summary: (payload.error_message as string) ?? (payload.reason as string) ?? `${row.action_type} ${status}`,
-    customer: (payload.customer as string) ?? (row.suite_id as string) ?? '',
-    provider: (row.provider as string) ?? 'Internal',
-    createdAt: row.created_at as string,
-    updatedAt: (row.updated_at as string) ?? (row.created_at as string),
-    subscribed: false,
-    timelineReceiptIds: [row.id as string],
-    notes: buildIncidentNotes(payload),
-    detectionSource: (payload.detection_source as Incident['detectionSource']) ?? 'rule',
-    customerNotified: (payload.customer_notified as Incident['customerNotified']) ?? 'no',
-    proofStatus: 'ok',
-    recommendedAction: (payload.recommended_action as string) ?? undefined,
-    correlationId: (row.correlation_id as string) ?? undefined,
-  };
-}
-
 export function useRealtimeIncidents(filters?: IncidentFilters) {
-  const fetcher = async (): Promise<PaginatedResult<Incident>> => {
-    return fetchIncidents(filters);
-  };
+  const [data, setData] = useState<Incident[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [count, setCount] = useState(0);
+  const fetchIdRef = useRef(0);
 
-  // Subscribe to receipts table but only care about failed/blocked status
-  // The filter ensures we only get INSERT events for incident-worthy receipts
-  return useRealtimeSubscription<Incident, Record<string, unknown>>({
-    table: 'receipts',
-    events: ['INSERT', 'UPDATE'],
-    filter: 'status=in.(failed,blocked)',
-    fetcher,
-    mapRow: (row) => {
-      // Only map rows that are actual incidents (failed/blocked)
-      const status = (row.status as string) ?? '';
-      if (status !== 'failed' && status !== 'blocked') {
-        // Return a dummy that will be filtered — shouldn't reach here due to filter
-        return mapIncidentRow(row);
-      }
-      return mapIncidentRow(row);
-    },
-    getKey: (item) => item.id,
-    deps: [filters?.severity, filters?.status, filters?.page, filters?.pageSize],
-  });
+  const load = useCallback(async () => {
+    const id = ++fetchIdRef.current;
+    try {
+      setLoading(true);
+      const result = await fetchIncidents(filters);
+      // Stale request guard
+      if (id !== fetchIdRef.current) return;
+      setData(result.data);
+      setCount(result.count);
+      setError(null);
+    } catch (err) {
+      if (id !== fetchIdRef.current) return;
+      setError(err instanceof Error ? err.message : 'Failed to load incidents');
+    } finally {
+      if (id === fetchIdRef.current) setLoading(false);
+    }
+  }, [filters?.severity, filters?.status, filters?.page, filters?.pageSize]);
+
+  // Initial load
+  useEffect(() => { load(); }, [load]);
+
+  // Realtime: refetch on new pipeline failures (debounced)
+  useEffect(() => {
+    let debounceTimer: ReturnType<typeof setTimeout>;
+
+    const channel = supabase
+      .channel('pipeline-incidents-refresh')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'receipts',
+          filter: 'status=in.(FAILED,BLOCKED,DENIED)',
+        },
+        (payload) => {
+          // Skip n8n receipts
+          const receiptType = ((payload.new as Record<string, unknown>)?.receipt_type as string) ?? '';
+          if (receiptType.startsWith('n8n_')) return;
+
+          // Debounce: batch rapid inserts into 1 refetch
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => load(), 2000);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      clearTimeout(debounceTimer);
+      supabase.removeChannel(channel);
+    };
+  }, [load]);
+
+  return { data, loading, error, count, refetch: load };
 }

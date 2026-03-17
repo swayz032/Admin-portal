@@ -48,8 +48,12 @@ export default function Receipts() {
 
   const loadReceipts = async () => {
     setLoading(true);
-    const data = await listReceipts();
-    setReceipts(data);
+    try {
+      const result = await listReceipts();
+      setReceipts(result.data ?? []);
+    } catch {
+      setReceipts([]);
+    }
     setLoading(false);
   };
 

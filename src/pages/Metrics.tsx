@@ -10,6 +10,7 @@ import {
   type OpsDashboardMetrics,
   type OpsDashboardProviderBreakdown,
 } from '@/services/opsFacadeClient';
+import { supabase } from '@/integrations/supabase/client';
 import { formatNumber } from '@/lib/formatters';
 import {
   Receipt,
@@ -57,17 +58,108 @@ export default function Metrics() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchData = useCallback(async () => {
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
     try {
-      const response = await fetchOpsDashboardMetrics();
+      // --- Supabase direct queries (PRIMARY data source) ---
+      const [
+        receiptsTotal,
+        receipts24h,
+        receiptsFailed24h,
+        providerRows,
+      ] = await Promise.all([
+        supabase.from('receipts').select('*', { count: 'exact', head: true }),
+        supabase.from('receipts').select('*', { count: 'exact', head: true }).gte('created_at', since24h),
+        supabase.from('receipts').select('*', { count: 'exact', head: true }).eq('status', 'FAILED').gte('created_at', since24h),
+        supabase.from('provider_call_log').select('provider, latency_ms, status').gte('created_at', since24h),
+      ]);
+
+      // Aggregate provider breakdown in JS
+      const rows = providerRows.data ?? [];
+      const providerMap = new Map<string, { calls: number; totalLatency: number; successes: number }>();
+      for (const row of rows) {
+        const key = row.provider ?? 'unknown';
+        const entry = providerMap.get(key) ?? { calls: 0, totalLatency: 0, successes: 0 };
+        entry.calls += 1;
+        entry.totalLatency += (row.latency_ms ?? 0);
+        if (row.status !== 'FAILED') entry.successes += 1;
+        providerMap.set(key, entry);
+      }
+
+      const providerBreakdown: OpsDashboardProviderBreakdown[] = [];
+      let totalCalls = 0;
+      let totalLatencySum = 0;
+      let totalSuccesses = 0;
+      for (const [provider, agg] of providerMap) {
+        providerBreakdown.push({
+          provider,
+          calls_24h: agg.calls,
+          avg_latency_ms: agg.calls > 0 ? agg.totalLatency / agg.calls : 0,
+          success_rate: agg.calls > 0 ? (agg.successes / agg.calls) * 100 : 100,
+        });
+        totalCalls += agg.calls;
+        totalLatencySum += agg.totalLatency;
+        totalSuccesses += agg.successes;
+      }
+      providerBreakdown.sort((a, b) => b.calls_24h - a.calls_24h);
+
+      const supabaseMetrics: OpsDashboardMetrics = {
+        receipts_total: receiptsTotal.count ?? 0,
+        receipts_24h: receipts24h.count ?? 0,
+        receipts_failed_24h: receiptsFailed24h.count ?? 0,
+        provider_calls_24h: totalCalls,
+        provider_success_rate: totalCalls > 0 ? (totalSuccesses / totalCalls) * 100 : 100,
+        provider_avg_latency_ms: totalCalls > 0 ? totalLatencySum / totalCalls : 0,
+        provider_breakdown: providerBreakdown,
+        // Fields not available from direct queries — defaults until ops facade merges
+        incidents_open: 0,
+        incidents_by_severity: { low: 0, medium: 0, high: 0, critical: 0 },
+        approvals_pending: 0,
+        system_status: 'healthy',
+      };
+
       if (mountedRef.current) {
-        setMetrics(response.metrics);
+        setMetrics(supabaseMetrics);
         setError(null);
         setLoading(false);
       }
+
+      // --- Ops facade (SECONDARY — merge additional data if reachable) ---
+      try {
+        const response = await fetchOpsDashboardMetrics();
+        if (mountedRef.current) {
+          setMetrics((prev) => {
+            if (!prev) return response.metrics;
+            return {
+              ...prev,
+              incidents_open: response.metrics.incidents_open,
+              incidents_by_severity: response.metrics.incidents_by_severity,
+              approvals_pending: response.metrics.approvals_pending,
+              system_status: response.metrics.system_status,
+            };
+          });
+        }
+      } catch {
+        // Ops facade unreachable — page still works with Supabase data
+      }
     } catch (err) {
-      if (mountedRef.current) {
-        setError(err instanceof Error ? err.message : 'Failed to load metrics');
-        setLoading(false);
+      // Supabase queries failed — fall back to ops facade
+      try {
+        const response = await fetchOpsDashboardMetrics();
+        if (mountedRef.current) {
+          setMetrics(response.metrics);
+          setError(null);
+          setLoading(false);
+        }
+      } catch (fallbackErr) {
+        if (mountedRef.current) {
+          setError(
+            err instanceof Error ? err.message :
+            fallbackErr instanceof Error ? fallbackErr.message :
+            'Failed to load metrics from all sources',
+          );
+          setLoading(false);
+        }
       }
     }
   }, []);

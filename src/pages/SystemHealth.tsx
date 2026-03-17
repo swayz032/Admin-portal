@@ -7,6 +7,7 @@ import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ModeText } from '@/components/shared/ModeText';
 import { useSystem } from '@/contexts/SystemContext';
+import { supabase } from '@/integrations/supabase/client';
 import {
   fetchOpsDeepHealth,
   fetchOpsDashboardMetrics,
@@ -28,8 +29,8 @@ import {
   XCircle,
   RefreshCw,
   Activity,
-  Shield,
   Clock,
+  WifiOff,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatTimeAgo } from '@/lib/formatters';
@@ -79,6 +80,155 @@ function getProviderStatusChip(status: string): { status: 'success' | 'warning' 
   }
 }
 
+// ---------------------------------------------------------------------------
+// Supabase direct queries (primary data source)
+// ---------------------------------------------------------------------------
+
+interface SupabaseIncidentCount {
+  severity: string;
+  count: number;
+}
+
+interface SupabaseProviderRow {
+  provider: string;
+  calls: number;
+  avg_latency: number;
+  failures: number;
+}
+
+interface SupabaseIncidentRow {
+  id: string;
+  status: string;
+  severity: string;
+  title: string;
+  correlation_id: string;
+  suite_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+async function fetchSupabaseIncidentCounts(): Promise<SupabaseIncidentCount[]> {
+  const { data, error } = await supabase.rpc('get_open_incident_counts');
+  if (!error && data) return data as SupabaseIncidentCount[];
+
+  // Fallback: query incidents table directly
+  const { data: rows, error: err2 } = await supabase
+    .from('incidents')
+    .select('severity')
+    .eq('status', 'open');
+  if (err2 || !rows) return [];
+
+  const map: Record<string, number> = {};
+  for (const r of rows) {
+    map[r.severity] = (map[r.severity] ?? 0) + 1;
+  }
+  return Object.entries(map).map(([severity, count]) => ({ severity, count }));
+}
+
+async function fetchSupabaseProviderHealth(): Promise<SupabaseProviderRow[]> {
+  // Try RPC first (may not exist)
+  const { data, error } = await supabase.rpc('get_provider_health_24h');
+  if (!error && data) return data as SupabaseProviderRow[];
+
+  // Fallback: query provider_call_log directly, aggregate client-side
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: rows, error: err2 } = await supabase
+    .from('provider_call_log')
+    .select('provider, latency_ms, status')
+    .gte('created_at', since);
+  if (err2 || !rows) return [];
+
+  const agg: Record<string, { calls: number; totalLatency: number; failures: number }> = {};
+  for (const r of rows) {
+    if (!agg[r.provider]) agg[r.provider] = { calls: 0, totalLatency: 0, failures: 0 };
+    agg[r.provider].calls++;
+    agg[r.provider].totalLatency += r.latency_ms ?? 0;
+    if (r.status === 'FAILED') agg[r.provider].failures++;
+  }
+  return Object.entries(agg).map(([provider, v]) => ({
+    provider,
+    calls: v.calls,
+    avg_latency: v.calls > 0 ? v.totalLatency / v.calls : 0,
+    failures: v.failures,
+  }));
+}
+
+async function fetchSupabaseOpenIncidents(): Promise<SupabaseIncidentRow[]> {
+  const { data, error } = await supabase
+    .from('incidents')
+    .select('id, status, severity, title, correlation_id, suite_id, created_at, updated_at')
+    .eq('status', 'open')
+    .order('severity', { ascending: true })
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error || !data) return [];
+  return data as SupabaseIncidentRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Derive overall status from Supabase incident counts
+// ---------------------------------------------------------------------------
+function deriveOverallStatus(counts: SupabaseIncidentCount[]): 'healthy' | 'degraded' | 'critical' {
+  const hasCritical = counts.some(c => (c.severity === 'critical' || c.severity === 'P0') && c.count > 0);
+  if (hasCritical) return 'critical';
+  const hasHigh = counts.some(c => (c.severity === 'high' || c.severity === 'P1') && c.count > 0);
+  if (hasHigh) return 'degraded';
+  return 'healthy';
+}
+
+// Maps both naming conventions: critical/high/medium/low AND P0/P1/P2/P3
+const SEVERITY_TO_SLOT: Record<string, 'p0' | 'p1' | 'p2' | 'p3'> = {
+  critical: 'p0', P0: 'p0',
+  high: 'p1', P1: 'p1',
+  medium: 'p2', P2: 'p2',
+  low: 'p3', P3: 'p3',
+};
+
+function deriveSeverityBreakdown(counts: SupabaseIncidentCount[]): { p0: number; p1: number; p2: number; p3: number } {
+  const breakdown = { p0: 0, p1: 0, p2: 0, p3: 0 };
+  for (const c of counts) {
+    const slot = SEVERITY_TO_SLOT[c.severity];
+    if (slot) breakdown[slot] += c.count;
+  }
+  return breakdown;
+}
+
+// Convert Supabase provider rows to OpsProviderStatus shape for the UI
+function toProviderStatus(rows: SupabaseProviderRow[]): OpsProviderStatus[] {
+  return rows.map(r => {
+    const errorRate = r.calls > 0 ? (r.failures / r.calls) * 100 : 0;
+    let status: 'connected' | 'degraded' | 'disconnected' = 'connected';
+    if (errorRate > 50) status = 'disconnected';
+    else if (errorRate > 5) status = 'degraded';
+    return {
+      provider: r.provider,
+      lane: '',
+      status,
+      connection_status: status,
+      scopes: [],
+      last_checked: new Date().toISOString(),
+      latency_ms: r.avg_latency,
+      p95_latency_ms: 0,
+      error_rate: errorRate,
+      webhook_error_rate: 0,
+    };
+  });
+}
+
+// Convert Supabase incident rows to OpsIncidentSummary shape for the UI
+function toIncidentSummary(rows: SupabaseIncidentRow[]): OpsIncidentSummary[] {
+  return rows.map(r => ({
+    incident_id: r.id,
+    state: r.status,
+    severity: r.severity,
+    title: r.title,
+    correlation_id: r.correlation_id ?? '',
+    suite_id: r.suite_id,
+    first_seen: r.created_at,
+    last_seen: r.updated_at,
+  }));
+}
+
 export default function SystemHealth() {
   const { viewMode } = useSystem();
   const [deepHealth, setDeepHealth] = useState<OpsDeepHealthResponse | null>(null);
@@ -86,11 +236,57 @@ export default function SystemHealth() {
   const [providers, setProviders] = useState<OpsProviderStatus[]>([]);
   const [incidents, setIncidents] = useState<OpsIncidentSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [backendOffline, setBackendOffline] = useState(false);
+
+  // Supabase-derived state
+  const [sbOverallStatus, setSbOverallStatus] = useState<'healthy' | 'degraded' | 'critical'>('healthy');
+  const [sbSeverityBreakdown, setSbSeverityBreakdown] = useState<{ p0: number; p1: number; p2: number; p3: number }>({ p0: 0, p1: 0, p2: 0, p3: 0 });
+  const [sbIncidentsOpen, setSbIncidentsOpen] = useState(0);
+  const [supabaseLoaded, setSupabaseLoaded] = useState(false);
+
   const mountedRef = useRef(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchAll = useCallback(async () => {
+    // -----------------------------------------------------------------------
+    // PRIMARY: Supabase direct queries (always succeed if Supabase is up)
+    // -----------------------------------------------------------------------
+    const [sbCountsRes, sbProvidersRes, sbIncidentsRes] = await Promise.allSettled([
+      fetchSupabaseIncidentCounts(),
+      fetchSupabaseProviderHealth(),
+      fetchSupabaseOpenIncidents(),
+    ]);
+
+    if (!mountedRef.current) return;
+
+    let sbLoaded = false;
+
+    if (sbCountsRes.status === 'fulfilled') {
+      const counts = sbCountsRes.value;
+      setSbOverallStatus(deriveOverallStatus(counts));
+      const breakdown = deriveSeverityBreakdown(counts);
+      setSbSeverityBreakdown(breakdown);
+      setSbIncidentsOpen(breakdown.p0 + breakdown.p1 + breakdown.p2 + breakdown.p3);
+      sbLoaded = true;
+    }
+
+    if (sbProvidersRes.status === 'fulfilled' && sbProvidersRes.value.length > 0) {
+      setProviders(toProviderStatus(sbProvidersRes.value));
+      sbLoaded = true;
+    }
+
+    if (sbIncidentsRes.status === 'fulfilled') {
+      setIncidents(toIncidentSummary(sbIncidentsRes.value));
+      sbLoaded = true;
+    }
+
+    if (sbLoaded) {
+      setSupabaseLoaded(true);
+    }
+
+    // -----------------------------------------------------------------------
+    // OPTIONAL: Ops facade (enhances data if backend is reachable)
+    // -----------------------------------------------------------------------
     try {
       const [healthRes, metricsRes, providersRes, incidentsRes] = await Promise.allSettled([
         fetchOpsDeepHealth(),
@@ -101,26 +297,29 @@ export default function SystemHealth() {
 
       if (!mountedRef.current) return;
 
-      if (healthRes.status === 'fulfilled') setDeepHealth(healthRes.value);
-      if (metricsRes.status === 'fulfilled') setDashMetrics(metricsRes.value.metrics);
-      if (providersRes.status === 'fulfilled') setProviders(providersRes.value.items);
-      if (incidentsRes.status === 'fulfilled') setIncidents(incidentsRes.value.items);
-
       const allFailed = [healthRes, metricsRes, providersRes, incidentsRes].every(r => r.status === 'rejected');
-      if (allFailed) {
-        const firstErr = healthRes.status === 'rejected' ? healthRes.reason : null;
-        setError(firstErr instanceof Error ? firstErr.message : 'All health checks failed');
-      } else {
-        setError(null);
-      }
 
-      setLoading(false);
-    } catch (err) {
-      if (mountedRef.current) {
-        setError(err instanceof Error ? err.message : 'Failed to load system health');
-        setLoading(false);
+      if (allFailed) {
+        // Backend unreachable — Supabase data is still displayed
+        setBackendOffline(true);
+      } else {
+        setBackendOffline(false);
+
+        // Merge ops facade data (overrides Supabase where available)
+        if (healthRes.status === 'fulfilled') setDeepHealth(healthRes.value);
+        if (metricsRes.status === 'fulfilled') setDashMetrics(metricsRes.value.metrics);
+        if (providersRes.status === 'fulfilled' && providersRes.value.items.length > 0) {
+          setProviders(providersRes.value.items);
+        }
+        if (incidentsRes.status === 'fulfilled' && incidentsRes.value.items.length > 0) {
+          setIncidents(incidentsRes.value.items);
+        }
       }
+    } catch {
+      if (mountedRef.current) setBackendOffline(true);
     }
+
+    if (mountedRef.current) setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -151,7 +350,8 @@ export default function SystemHealth() {
     );
   }
 
-  if (error && !deepHealth && !dashMetrics) {
+  // Only show full error if BOTH Supabase and backend failed
+  if (!supabaseLoaded && !deepHealth && !dashMetrics) {
     return (
       <div className="space-y-6">
         <div className="page-header">
@@ -160,7 +360,7 @@ export default function SystemHealth() {
         <EmptyState
           variant="error"
           title="Failed to load system health"
-          description={error}
+          description="Both Supabase and backend are unreachable. Check your network connection."
           actionLabel="Retry"
           onAction={() => { setLoading(true); fetchAll(); }}
         />
@@ -168,11 +368,36 @@ export default function SystemHealth() {
     );
   }
 
-  const overallStatus = deepHealth?.status ?? 'healthy';
+  // Prefer ops facade status, fall back to Supabase-derived
+  const overallStatus = deepHealth?.status ?? sbOverallStatus;
   const checks = deepHealth?.checks ?? {};
   const healthyCount = Object.values(checks).filter(c => c.status === 'ok').length;
   const totalChecks = Object.keys(checks).length;
-  const severityBreakdown = dashMetrics?.incidents_by_severity;
+
+  // Prefer ops facade metrics, fall back to Supabase-derived
+  const incidentsOpen = dashMetrics?.incidents_open ?? sbIncidentsOpen;
+  const severityBreakdown = dashMetrics?.incidents_by_severity ?? sbSeverityBreakdown;
+  const providerSuccessRate = dashMetrics?.provider_success_rate;
+  const providerAvgLatency = dashMetrics?.provider_avg_latency_ms;
+
+  // Compute provider success rate from Supabase data if ops facade is offline
+  let displaySuccessRate: string;
+  let displayLatency: string | undefined;
+  if (providerSuccessRate !== undefined) {
+    displaySuccessRate = `${providerSuccessRate.toFixed(1)}%`;
+    displayLatency = providerAvgLatency !== undefined ? `Avg ${providerAvgLatency.toFixed(0)}ms latency` : undefined;
+  } else if (providers.length > 0) {
+    const totalCalls = providers.reduce((s, p) => s + (p.error_rate !== undefined ? 1 : 0), 0);
+    const avgErrorRate = totalCalls > 0 ? providers.reduce((s, p) => s + p.error_rate, 0) / totalCalls : 0;
+    displaySuccessRate = `${(100 - avgErrorRate).toFixed(1)}%`;
+    const avgLat = providers.reduce((s, p) => s + p.latency_ms, 0) / (providers.length || 1);
+    displayLatency = `Avg ${avgLat.toFixed(0)}ms latency`;
+  } else {
+    displaySuccessRate = 'N/A';
+    displayLatency = undefined;
+  }
+
+  const successRateNum = providerSuccessRate ?? (providers.length > 0 ? 100 - providers.reduce((s, p) => s + p.error_rate, 0) / providers.length : 100);
 
   return (
     <div className="space-y-6">
@@ -189,10 +414,18 @@ export default function SystemHealth() {
             />
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => fetchAll()}>
-          <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          {backendOffline && (
+            <span className="flex items-center gap-1.5 text-xs text-warning bg-warning/10 px-2.5 py-1 rounded-full border border-warning/20">
+              <WifiOff className="h-3 w-3" />
+              Backend offline
+            </span>
+          )}
+          <Button variant="outline" size="sm" onClick={() => fetchAll()}>
+            <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Overall Status KPIs */}
@@ -209,22 +442,22 @@ export default function SystemHealth() {
         />
         <KPICard
           title={viewMode === 'operator' ? 'Services OK' : 'Dependencies Healthy'}
-          value={`${healthyCount}/${totalChecks}`}
-          subtitle={healthyCount === totalChecks ? 'All passing' : `${totalChecks - healthyCount} need attention`}
+          value={totalChecks > 0 ? `${healthyCount}/${totalChecks}` : (backendOffline ? 'Backend offline' : '0/0')}
+          subtitle={totalChecks > 0
+            ? (healthyCount === totalChecks ? 'All passing' : `${totalChecks - healthyCount} need attention`)
+            : (backendOffline ? 'Requires backend connection' : undefined)}
           icon={<Server className="h-4 w-4" />}
-          status={healthyCount === totalChecks ? 'success' : 'warning'}
+          status={totalChecks > 0 ? (healthyCount === totalChecks ? 'success' : 'warning') : (backendOffline ? 'warning' : 'success')}
         />
         <KPICard
           title={viewMode === 'operator' ? 'Open Issues' : 'Open Incidents'}
-          value={dashMetrics?.incidents_open ?? 0}
-          subtitle={severityBreakdown
-            ? `${severityBreakdown.p0} P0, ${severityBreakdown.p1} P1`
-            : undefined}
+          value={incidentsOpen}
+          subtitle={`${severityBreakdown.p0} P0, ${severityBreakdown.p1} P1`}
           icon={<AlertTriangle className="h-4 w-4" />}
           status={
-            (severityBreakdown?.p0 ?? 0) > 0
+            severityBreakdown.p0 > 0
               ? 'critical'
-              : (dashMetrics?.incidents_open ?? 0) > 0
+              : incidentsOpen > 0
                 ? 'warning'
                 : 'success'
           }
@@ -233,13 +466,13 @@ export default function SystemHealth() {
         />
         <KPICard
           title={viewMode === 'operator' ? 'Provider Success' : 'Provider Success Rate'}
-          value={dashMetrics ? `${dashMetrics.provider_success_rate.toFixed(1)}%` : 'N/A'}
-          subtitle={dashMetrics ? `Avg ${dashMetrics.provider_avg_latency_ms.toFixed(0)}ms latency` : undefined}
+          value={displaySuccessRate}
+          subtitle={displayLatency}
           icon={<Activity className="h-4 w-4" />}
           status={
-            (dashMetrics?.provider_success_rate ?? 100) >= 99
+            successRateNum >= 99
               ? 'success'
-              : (dashMetrics?.provider_success_rate ?? 100) >= 95
+              : successRateNum >= 95
                 ? 'warning'
                 : 'critical'
           }
@@ -248,46 +481,61 @@ export default function SystemHealth() {
 
       {/* Backend Dependencies */}
       <Panel title={viewMode === 'operator' ? 'Infrastructure Health' : 'Backend Dependencies'}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {Object.entries(checks).map(([key, check]) => {
-            const Icon = DEPENDENCY_ICONS[key] ?? Server;
-            const chipProps = getStatusChipProps(check.status);
-            return (
-              <div
-                key={key}
-                className="flex items-start gap-3 p-4 rounded-lg border border-border bg-surface-1"
-              >
-                <div className={`p-2 rounded-lg ${
-                  check.status === 'ok' ? 'bg-success/10 text-success' :
-                  check.status === 'degraded' ? 'bg-warning/10 text-warning' :
-                  'bg-destructive/10 text-destructive'
-                }`}>
-                  <Icon className="h-5 w-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-sm font-medium text-foreground">
-                      {getDependencyLabel(key)}
-                    </span>
-                    <StatusChip status={chipProps.status} label={chipProps.label} />
+        {backendOffline && Object.keys(checks).length === 0 ? (
+          <div className="flex items-center gap-3 p-4 rounded-lg border border-warning/30 bg-warning/5">
+            <WifiOff className="h-5 w-5 text-warning" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Backend offline</p>
+              <p className="text-xs text-muted-foreground">
+                Dependency checks (PostgreSQL, Redis, OpenAI, n8n) require the backend to be reachable.
+                Supabase data is still displayed in other panels.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {Object.entries(checks).map(([key, check]) => {
+                const Icon = DEPENDENCY_ICONS[key] ?? Server;
+                const chipProps = getStatusChipProps(check.status);
+                return (
+                  <div
+                    key={key}
+                    className="flex items-start gap-3 p-4 rounded-lg border border-border bg-surface-1"
+                  >
+                    <div className={`p-2 rounded-lg ${
+                      check.status === 'ok' ? 'bg-success/10 text-success' :
+                      check.status === 'degraded' ? 'bg-warning/10 text-warning' :
+                      'bg-destructive/10 text-destructive'
+                    }`}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-sm font-medium text-foreground">
+                          {getDependencyLabel(key)}
+                        </span>
+                        <StatusChip status={chipProps.status} label={chipProps.label} />
+                      </div>
+                      {check.latency_ms !== undefined && (
+                        <p className="text-xs text-muted-foreground">
+                          Latency: {check.latency_ms.toFixed(0)}ms
+                        </p>
+                      )}
+                      {check.error && (
+                        <p className="text-xs text-destructive mt-1 truncate" title={check.error}>
+                          {check.error}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  {check.latency_ms !== undefined && (
-                    <p className="text-xs text-muted-foreground">
-                      Latency: {check.latency_ms.toFixed(0)}ms
-                    </p>
-                  )}
-                  {check.error && (
-                    <p className="text-xs text-destructive mt-1 truncate" title={check.error}>
-                      {check.error}
-                    </p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        {Object.keys(checks).length === 0 && (
-          <EmptyState variant="no-data" title="No dependency checks available" />
+                );
+              })}
+            </div>
+            {Object.keys(checks).length === 0 && (
+              <EmptyState variant="no-data" title="No dependency checks available" />
+            )}
+          </>
         )}
       </Panel>
 

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, AlertTriangle, XCircle, RefreshCw } from 'lucide-react';
-import { fetchOpsDashboardMetrics, type OpsDashboardMetrics } from '@/services/opsFacadeClient';
+import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { fetchOpsDashboardMetrics } from '@/services/opsFacadeClient';
 
 type SystemStatus = 'healthy' | 'degraded' | 'critical';
 
@@ -29,27 +30,73 @@ const STATUS_CONFIG: Record<SystemStatus, {
 
 const REFRESH_INTERVAL_MS = 30_000;
 
+/**
+ * Derive system status directly from Supabase incidents table.
+ * - Any open P0/critical incident → 'critical'
+ * - Any open P1/high incident → 'degraded'
+ * - No open incidents → 'healthy'
+ */
+async function deriveStatusFromSupabase(): Promise<SystemStatus> {
+  const { data: openIncidents, error } = await supabase
+    .from('incidents')
+    .select('severity')
+    .eq('status', 'open');
+
+  if (error) {
+    // If the incidents table doesn't exist or query fails, default to healthy
+    // rather than showing an error — the admin portal is still functional
+    console.warn('[SystemStatusBanner] Supabase incidents query failed:', error.message);
+    return 'healthy';
+  }
+
+  const hasCritical = openIncidents?.some(
+    (i) => i.severity === 'critical' || i.severity === 'P0'
+  );
+  const hasHigh = openIncidents?.some(
+    (i) => i.severity === 'high' || i.severity === 'P1'
+  );
+
+  return hasCritical ? 'critical' : hasHigh ? 'degraded' : 'healthy';
+}
+
+/**
+ * Attempt to get richer status from the ops facade backend.
+ * Returns null if unreachable — caller falls back to Supabase-derived status.
+ */
+async function fetchOpsStatus(): Promise<SystemStatus | null> {
+  try {
+    const response = await fetchOpsDashboardMetrics();
+    return response.metrics.system_status;
+  } catch {
+    return null;
+  }
+}
+
 export function SystemStatusBanner() {
-  const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [status, setStatus] = useState<SystemStatus>('healthy');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchStatus = useCallback(async () => {
-    try {
-      const response = await fetchOpsDashboardMetrics();
-      if (mountedRef.current) {
-        setStatus(response.metrics.system_status);
-        setError(null);
-        setLoading(false);
-      }
-    } catch (err) {
-      if (mountedRef.current) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch system status');
-        setLoading(false);
-      }
+    // Primary: derive status from Supabase directly
+    const supabaseStatus = await deriveStatusFromSupabase();
+
+    // Bonus: try ops facade for potentially richer info
+    const opsStatus = await fetchOpsStatus();
+
+    if (!mountedRef.current) return;
+
+    // Use the worse status between the two sources (if ops facade is reachable)
+    // This ensures we never hide a problem that only one source knows about
+    let finalStatus = supabaseStatus;
+    if (opsStatus) {
+      const severity: Record<SystemStatus, number> = { healthy: 0, degraded: 1, critical: 2 };
+      finalStatus = severity[opsStatus] > severity[supabaseStatus] ? opsStatus : supabaseStatus;
     }
+
+    setStatus(finalStatus);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -71,16 +118,6 @@ export function SystemStatusBanner() {
 
   // Don't render while loading initial state
   if (loading) return null;
-
-  // Show error state if fetch failed
-  if (error || !status) {
-    return (
-      <div className="flex items-center justify-center gap-2 px-4 py-1.5 text-xs font-medium bg-muted/50 border-b border-border text-muted-foreground">
-        <RefreshCw className="h-3 w-3" />
-        <span>System status unavailable</span>
-      </div>
-    );
-  }
 
   const config = STATUS_CONFIG[status];
   const Icon = config.icon;

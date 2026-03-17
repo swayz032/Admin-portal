@@ -32,6 +32,7 @@ import {
   Monitor,
   HeartPulse,
   BarChart2,
+  Workflow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -62,6 +63,7 @@ const operationsItems = [
   { to: '/automation', icon: Zap, label: 'Automation' },
   { to: '/safety', icon: Shield, label: 'Safety' },
   { to: '/incidents', icon: AlertTriangle, label: 'Incidents' },
+  { to: '/n8n-operations', icon: Workflow, label: 'n8n Workflows', engineerLabel: 'n8n Operations' },
   { to: '/system-health', icon: HeartPulse, label: 'Health', engineerLabel: 'System Health' },
   { to: '/metrics', icon: BarChart2, label: 'Metrics', engineerLabel: 'Metrics' },
 ];

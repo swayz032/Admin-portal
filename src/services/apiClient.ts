@@ -138,7 +138,8 @@ function mapApprovalStatus(status: string): 'Pending' | 'Approved' | 'Denied' {
 }
 
 // ============================================================================
-// INCIDENTS — derived from receipts with failure/incident domain
+// INCIDENTS — aggregated by category from receipts (pipeline only, n8n excluded)
+// Each unique receipt_type + action_type = 1 incident with count. Idempotent.
 // ============================================================================
 export async function fetchIncidents(filters?: {
   severity?: string;
@@ -146,89 +147,503 @@ export async function fetchIncidents(filters?: {
   page?: number;
   pageSize?: number;
 }): Promise<PaginatedResult<Incident>> {
+  // Fetch ALL pipeline failure receipts (no pagination on raw rows — we aggregate)
+  const { data, error } = await supabase
+    .from('receipts')
+    .select('receipt_id, receipt_type, status, action, result, correlation_id, suite_id, tenant_id, actor_id, created_at')
+    .in('status', ['failed', 'blocked', 'FAILED', 'BLOCKED', 'DENIED'])
+    .not('receipt_type', 'like', 'n8n_%')
+    .order('created_at', { ascending: false })
+    .limit(2000);
+
+  if (error) throw new ApiError(`Failed to fetch incidents: ${error.message}`, error.code);
+
+  // Aggregate by fingerprint key: receipt_type + action_type + status
+  const groups = new Map<string, {
+    rows: Record<string, unknown>[];
+    count: number;
+    latest: string;
+    earliest: string;
+    receiptType: string;
+    actionType: string;
+    status: string;
+  }>();
+
+  for (const row of data ?? []) {
+    const action = (row.action as Record<string, unknown>) ?? {};
+    const actionType = (action.action_type as string) ?? '';
+    const toolUsed = (action.tool_used as string) ?? '';
+    const status = ((row.status as string) ?? '').toLowerCase();
+    // Fingerprint: receipt_type + action_type + tool + status
+    const key = `${row.receipt_type}::${actionType}::${toolUsed}::${status}`;
+    const ts = row.created_at as string;
+
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count++;
+      if (ts > existing.latest) {
+        existing.latest = ts;
+        existing.rows[0] = row as Record<string, unknown>; // Keep latest row as representative
+      }
+      if (ts < existing.earliest) existing.earliest = ts;
+    } else {
+      groups.set(key, {
+        rows: [row as Record<string, unknown>],
+        count: 1,
+        latest: ts,
+        earliest: ts,
+        receiptType: row.receipt_type as string,
+        actionType,
+        status,
+      });
+    }
+  }
+
+  // Convert groups to Incident objects
+  const now = new Date();
+  const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  let incidents: Incident[] = Array.from(groups.values()).map(g => {
+    const row = g.rows[0];
+    const incident = mapIncidentRow(row);
+    // Enrich with aggregation data
+    const isActive = g.latest >= twentyFourHoursAgo;
+    incident.summary = `${incident.summary}${g.count > 1 ? ` (${g.count.toLocaleString()} occurrences)` : ''}`;
+    incident.notes = [
+      ...incident.notes,
+      {
+        author: 'System',
+        body: `${g.count.toLocaleString()} total failures from ${g.earliest.split('T')[0]} to ${g.latest.split('T')[0]}. ${isActive ? 'STILL ACTIVE — failing in last 24h.' : 'Stopped — no failures in last 24h.'}`,
+        timestamp: g.latest,
+      },
+    ];
+    return incident;
+  });
+
+  // Sort: P0 first, then P1, then by count (embedded in summary), then newest
+  const severityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
+  incidents.sort((a, b) => {
+    const sevDiff = (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4);
+    if (sevDiff !== 0) return sevDiff;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  // Apply page/pageSize to aggregated results
   const page = filters?.page ?? 1;
   const pageSize = filters?.pageSize ?? 50;
   const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
 
-  // Query receipts that represent incidents (failed operations, blocked actions)
-  let query = supabase
-    .from('receipts')
-    .select('*', { count: 'exact' })
-    .in('status', ['failed', 'blocked'])
-    .order('created_at', { ascending: false })
-    .range(from, to);
-
+  // Severity filter on aggregated results
   if (filters?.severity) {
-    // Severity is derived from payload or domain
-    // P0 = payment failures, P1 = provider outages, P2 = degraded, P3 = info
-    query = query.contains('payload', { severity: filters.severity });
+    incidents = incidents.filter(i => i.severity === filters.severity);
   }
 
-  const { data, error, count } = await query;
-  if (error) throw new ApiError(`Failed to fetch incidents: ${error.message}`, error.code);
+  const total = incidents.length;
+  const paged = incidents.slice(from, from + pageSize);
 
   return {
-    data: (data ?? []).map(mapIncidentRow),
-    count: count ?? 0,
+    data: paged,
+    count: total,
     page,
     pageSize,
   };
 }
 
+// ============================================================================
+// N8N OPERATIONS — dedicated n8n workflow failures
+// ============================================================================
+export interface N8nIncidentGroup {
+  actionType: string;
+  count: number;
+  latestFailure: string;
+  earliestFailure: string;
+  receiptType: string;
+  summary: string;
+  severity: 'P0' | 'P1' | 'P2' | 'P3';
+  isActive: boolean;
+  agent: string;
+  recommendedAction: string;
+}
+
+export async function fetchN8nIncidents(): Promise<N8nIncidentGroup[]> {
+  const { data, error } = await supabase
+    .from('receipts')
+    .select('receipt_type, status, action, result, created_at')
+    .in('status', ['FAILED', 'BLOCKED', 'DENIED'])
+    .or('receipt_type.eq.n8n_ops,receipt_type.eq.n8n_agent')
+    .order('created_at', { ascending: false });
+
+  if (error) throw new ApiError(`Failed to fetch n8n incidents: ${error.message}`, error.code);
+
+  // Group by action_type
+  const groups = new Map<string, {
+    count: number;
+    latest: string;
+    earliest: string;
+    receiptType: string;
+    actionType: string;
+  }>();
+
+  for (const row of data ?? []) {
+    const action = (row.action as Record<string, unknown>) ?? {};
+    const actionType = (action.action_type as string) ?? 'unknown';
+    const existing = groups.get(actionType);
+    const ts = row.created_at as string;
+
+    if (existing) {
+      existing.count++;
+      if (ts > existing.latest) existing.latest = ts;
+      if (ts < existing.earliest) existing.earliest = ts;
+    } else {
+      groups.set(actionType, {
+        count: 1,
+        latest: ts,
+        earliest: ts,
+        receiptType: row.receipt_type as string,
+        actionType,
+      });
+    }
+  }
+
+  const now = new Date();
+  const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+
+  return Array.from(groups.values())
+    .map(g => ({
+      actionType: g.actionType,
+      count: g.count,
+      latestFailure: g.latest,
+      earliestFailure: g.earliest,
+      receiptType: g.receiptType,
+      isActive: g.latest >= twentyFourHoursAgo,
+      ...deriveN8nIncidentDetails(g.actionType, g.count),
+    }))
+    .sort((a, b) => {
+      // Active first, then by severity, then by count
+      if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+      const sevOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
+      const sevDiff = sevOrder[a.severity] - sevOrder[b.severity];
+      if (sevDiff !== 0) return sevDiff;
+      return b.count - a.count;
+    });
+}
+
+function deriveN8nIncidentDetails(actionType: string, count: number): {
+  summary: string;
+  severity: 'P0' | 'P1' | 'P2' | 'P3';
+  agent: string;
+  recommendedAction: string;
+} {
+  const details: Record<string, { summary: string; severity: 'P0' | 'P1' | 'P2' | 'P3'; agent: string; action: string }> = {
+    'ops.slo_monitor': {
+      summary: `SLO Monitor Non-Functional — Service level monitoring offline. ${count.toLocaleString()} consecutive failures. No SLO breach detection active.`,
+      severity: 'P1',
+      agent: 'SRE',
+      action: 'Check n8n SLO monitor workflow connectivity. Verify Supabase credentials in n8n environment.',
+    },
+    'ops.provider_health_check': {
+      summary: `Provider Health Checks Failing — Cannot verify external service availability. ${count} checks missed.`,
+      severity: 'P2',
+      agent: 'SRE',
+      action: 'Review n8n provider health workflow. Check if target endpoints are reachable from n8n container.',
+    },
+    'ops.rotation_health_check': {
+      summary: `Secrets Rotation Health Monitor Down — Cannot verify credential rotation status. ${count} checks missed.`,
+      severity: 'P2',
+      agent: 'SRE',
+      action: 'Verify AWS Secrets Manager access from n8n. Check rotation Lambda function status.',
+    },
+    'ops.analytics_rollup': {
+      summary: `Analytics Rollup Pipeline Broken — Business metrics not aggregating. Dashboard data going stale.`,
+      severity: 'P2',
+      agent: 'SRE',
+      action: 'Check n8n analytics workflow. Verify Supabase RPC functions for rollup are accessible.',
+    },
+    'ops.receipt_archival': {
+      summary: `Receipt Archival Pipeline Stalled — Old receipts not being archived. Table growth unbounded.`,
+      severity: 'P2',
+      agent: 'SRE',
+      action: 'Check n8n archival workflow. Verify Supabase permissions for receipt table operations.',
+    },
+    'ops.cert_expiry_check': {
+      summary: `SSL/TLS Certificate Monitoring Broken — Cannot detect expiring certificates. Risk of unexpected outage.`,
+      severity: 'P2',
+      agent: 'SRE',
+      action: 'n8n cert check uses fetch() which is unavailable. Upgrade n8n Code node or use HTTP Request node.',
+    },
+    'ops.rotation_health_alert': {
+      summary: `Rotation Alert Dispatch Failed — Critical alert about credential rotation could not be sent.`,
+      severity: 'P1',
+      agent: 'SRE',
+      action: 'Check Discord webhook and n8n alert routing configuration.',
+    },
+    'agent.adam.pulse_scan': {
+      summary: `Adam Pulse Scan Down — Market and industry intelligence scanning offline. ${count} scans missed.`,
+      severity: 'P2',
+      agent: 'Adam',
+      action: 'Check Adam pulse scan n8n workflow. Verify Exa/Brave API credentials.',
+    },
+    'agent.adam.daily_brief': {
+      summary: `Adam Daily Brief Failing — Morning intelligence briefing not generating. Founder starts day blind.`,
+      severity: 'P2',
+      agent: 'Adam',
+      action: 'Check Adam daily brief workflow. Verify LLM API access from n8n.',
+    },
+    'agent.adam.focus_weekly': {
+      summary: `Adam Focus Weekly Broken — Weekly strategic focus report not generating.`,
+      severity: 'P3',
+      agent: 'Adam',
+      action: 'Check Adam focus weekly n8n workflow configuration.',
+    },
+    'agent.adam.education_weekly': {
+      summary: `Adam Education Digest Failing — Weekly learning content curation offline.`,
+      severity: 'P3',
+      agent: 'Adam',
+      action: 'Check Adam education workflow and content source APIs.',
+    },
+    'agent.adam.library_curate': {
+      summary: `Adam Library Curation Down — Knowledge library auto-curation not running.`,
+      severity: 'P3',
+      agent: 'Adam',
+      action: 'Check Adam library curation workflow.',
+    },
+    'agent.sarah.handle_call': {
+      summary: `Sarah Call Handler Failing — Inbound call routing and handling broken. ${count} calls potentially missed.`,
+      severity: 'P1',
+      agent: 'Sarah',
+      action: 'Check Sarah call handler workflow. Verify Twilio/LiveKit webhook configuration in n8n.',
+    },
+    'agent.eli.triage_email': {
+      summary: `Eli Email Triage Down — Email classification and auto-routing offline. ${count} emails untriaged.`,
+      severity: 'P1',
+      agent: 'Eli',
+      action: 'Check Eli triage workflow. Verify PolarisM email API access from n8n.',
+    },
+    'agent.nora.summarize_meeting': {
+      summary: `Nora Meeting Summaries Failing — Post-meeting summaries not generating. ${count} meetings unsummarized.`,
+      severity: 'P2',
+      agent: 'Nora',
+      action: 'Check Nora summarize workflow. Verify Deepgram transcript access.',
+    },
+    'agent.teressa.sync_books': {
+      summary: `Teressa QuickBooks Sync Broken — Accounting data not syncing. Financial records drifting from source.`,
+      severity: 'P1',
+      agent: 'Teressa',
+      action: 'Check Teressa sync workflow. Verify QuickBooks OAuth token and API connectivity.',
+    },
+    'agent.quinn.check_overdue': {
+      summary: `Quinn Overdue Invoice Detection Down — Cannot detect overdue payments. Revenue at risk.`,
+      severity: 'P1',
+      agent: 'Quinn',
+      action: 'Check Quinn overdue check workflow. Verify Stripe API access from n8n.',
+    },
+    'onboarding.activation': {
+      summary: `Onboarding Activation Failures — New account activations failing in n8n pipeline. ${count} accounts stuck.`,
+      severity: 'P2',
+      agent: 'System',
+      action: 'Check onboarding activation workflow. Verify Supabase auth and tenant creation access.',
+    },
+  };
+
+  const match = details[actionType];
+  if (match) {
+    return { summary: match.summary, severity: match.severity, agent: match.agent, recommendedAction: match.action };
+  }
+
+  // Fallback for unknown action types
+  const agentMatch = actionType.match(/^agent\.(\w+)\./);
+  const agent = agentMatch ? agentMatch[1].charAt(0).toUpperCase() + agentMatch[1].slice(1) : 'System';
+  const cleanName = actionType.replace(/^(ops\.|agent\.\w+\.)/, '').replace(/_/g, ' ');
+  return {
+    summary: `${agent} — ${cleanName} failing. ${count} failures recorded.`,
+    severity: 'P3',
+    agent,
+    recommendedAction: `Investigate n8n workflow for ${actionType}.`,
+  };
+}
+
+// ============================================================================
+// INCIDENT ROW MAPPING — premium, human + machine readable messages
+// ============================================================================
 function mapIncidentRow(row: Record<string, unknown>): Incident {
-  const payload = (row.payload as Record<string, unknown>) ?? {};
-  const status = (row.status as string) ?? 'failed';
+  const action = (row.action as Record<string, unknown>) ?? {};
+  const result = (row.result as Record<string, unknown>) ?? {};
+  const status = ((row.status as string) ?? 'failed').toLowerCase();
+  const receiptType = (row.receipt_type as string) ?? '';
+  const actionType = (action.action_type as string) ?? '';
+  const toolUsed = (action.tool_used as string) ?? '';
+  const errorMsg = (result.error_message as string) ?? (result.error as string) ?? (result.reason_code as string) ?? '';
 
   return {
-    id: row.id as string,
+    id: (row.receipt_id as string) ?? `${receiptType}-${row.created_at}`,
     severity: deriveSeverity(row),
-    status: status === 'failed' || status === 'blocked' ? 'Open' : 'Resolved',
-    summary: (payload.error_message as string) ?? (payload.reason as string) ?? `${row.action_type} ${status}`,
-    customer: (payload.customer as string) ?? (row.suite_id as string) ?? '',
-    provider: (row.provider as string) ?? 'Internal',
+    status: status === 'failed' || status === 'blocked' || status === 'denied' ? 'Open' : 'Resolved',
+    summary: derivePremiumSummary(receiptType, actionType, toolUsed, errorMsg, status),
+    customer: (row.suite_id as string) ?? '',
+    provider: deriveProvider(receiptType, toolUsed, action),
     createdAt: row.created_at as string,
-    updatedAt: (row.updated_at as string) ?? (row.created_at as string),
+    updatedAt: row.created_at as string,
     subscribed: false,
-    timelineReceiptIds: [row.id as string],
-    notes: buildIncidentNotes(payload),
-    detectionSource: (payload.detection_source as Incident['detectionSource']) ?? 'rule',
-    customerNotified: (payload.customer_notified as Incident['customerNotified']) ?? 'no',
+    timelineReceiptIds: [(row.receipt_id as string) ?? ''],
+    notes: buildIncidentNotes(result, errorMsg),
+    detectionSource: 'rule',
+    customerNotified: 'no',
     proofStatus: 'ok',
-    recommendedAction: (payload.recommended_action as string) ?? undefined,
+    recommendedAction: deriveRecommendedAction(receiptType, actionType, errorMsg),
     correlationId: (row.correlation_id as string) ?? undefined,
   };
 }
 
+function derivePremiumSummary(
+  receiptType: string,
+  actionType: string,
+  toolUsed: string,
+  errorMsg: string,
+  status: string,
+): string {
+  const rt = receiptType.toLowerCase();
+
+  // Orchestrator failures
+  if (rt === 'orchestrator') {
+    if (toolUsed.includes('search_general_knowledge'))
+      return 'Knowledge Base Retrieval Failed — Ava cannot search general knowledge. Users may receive incomplete answers.';
+    if (toolUsed.includes('financial_retrieval'))
+      return 'Financial Knowledge Retrieval Failed — Finn cannot access financial analysis data.';
+    return `Orchestrator Execution Failed — ${actionType || 'Core pipeline'} encountered an error during processing.`;
+  }
+
+  // Stripe failures
+  if (rt.startsWith('stripe')) {
+    if (errorMsg.includes('Expired API Key'))
+      return 'Stripe API Key Expired — Payment processing blocked. Immediate key rotation required. Revenue impact.';
+    return `Stripe Integration Error — ${actionType || 'Payment operation'} failed. ${errorMsg || 'Check Stripe dashboard.'}`;
+  }
+
+  // Mail OAuth / security
+  if (rt === 'mail.oauth.csrf_rejected')
+    return 'OAuth Security Alert — CSRF token rejected during mail authentication. Possible replay or session hijack attempt.';
+  if (rt.startsWith('mail.oauth'))
+    return `Mail OAuth Failure — ${errorMsg || 'Authentication flow interrupted.'} Customer email access affected.`;
+
+  // Mail onboarding
+  if (rt === 'mail.onboarding.start_failed')
+    return 'Mail Onboarding Cannot Start — New email account setup failing. Customer stuck in signup flow.';
+  if (rt === 'mail.onboarding.invalid_transition')
+    return 'Mail Onboarding State Error — Pipeline hit invalid state transition. Account stuck between setup stages.';
+  if (rt === 'mail.onboarding.activation_failed')
+    return 'Mail Account Activation Blocked — Email account cannot activate. Customer has no email access.';
+
+  // Profile onboarding
+  if (rt === 'onboarding.profile_update')
+    return 'Profile Update Failed — Customer onboarding profile changes not saving. Setup flow interrupted.';
+
+  // Param extraction
+  if (rt === 'param_extraction')
+    return `Parameter Extraction Failed — Cannot parse ${toolUsed || 'tool'} request. Agent action blocked at planning stage.`;
+
+  // Tool execution
+  if (rt === 'tool_execution') {
+    if (status === 'denied')
+      return `Tool Execution Denied — ${toolUsed || 'Operation'} blocked by governance policy. Capability token invalid or missing.`;
+    return `Tool Execution Failed — ${toolUsed || 'Agent operation'} could not complete. ${errorMsg || 'Check tool availability.'}`;
+  }
+
+  // Auth
+  if (rt === 'auth_denial')
+    return 'Access Denied — Unauthorized request blocked by authentication guard. Check user permissions.';
+
+  // Domain check
+  if (rt === 'domain.check.denied')
+    return 'Domain Verification Denied — Domain check blocked by RED tier governance policy. Requires explicit authority.';
+
+  // Generic fallback — still premium
+  const cleanType = receiptType.replace(/[._]/g, ' ');
+  if (errorMsg) return `${cleanType} — ${errorMsg}`;
+  return `${cleanType} — Operation ${status}. Review receipt details for root cause.`;
+}
+
+function deriveProvider(
+  receiptType: string,
+  toolUsed: string,
+  action: Record<string, unknown>,
+): string {
+  const rt = receiptType.toLowerCase();
+  if (rt.startsWith('stripe')) return 'Stripe';
+  if (rt.startsWith('mail.oauth') || rt.startsWith('mail.onboarding')) return 'PolarisM';
+  if (rt === 'orchestrator') {
+    if (toolUsed.includes('financial')) return 'Finn (RAG)';
+    return 'Ava (Orchestrator)';
+  }
+  if (rt === 'tool_execution') return toolUsed || 'Agent Tools';
+  if (rt === 'param_extraction') return toolUsed || 'Parameter Engine';
+  if (rt === 'auth_denial') return 'Auth Guard';
+  if (rt.startsWith('domain')) return 'Domain Rail';
+  if (rt.startsWith('onboarding')) return 'Onboarding';
+  return (action.provider as string) ?? 'Internal';
+}
+
+function deriveRecommendedAction(receiptType: string, actionType: string, errorMsg: string): string {
+  const rt = receiptType.toLowerCase();
+  if (rt.startsWith('stripe') && errorMsg.includes('Expired'))
+    return 'Rotate Stripe API key immediately. Go to Stripe Dashboard > Developers > API Keys. Update in AWS Secrets Manager.';
+  if (rt === 'orchestrator')
+    return 'Check RAG vector store connectivity. Verify embedding service is running and Supabase pgvector extension is active.';
+  if (rt.startsWith('mail.oauth'))
+    return 'Review OAuth flow logs. Check Google/Microsoft OAuth app credentials and redirect URIs.';
+  if (rt.startsWith('mail.onboarding'))
+    return 'Check PolarisM onboarding pipeline status. Verify domain DNS records and mail server provisioning.';
+  if (rt === 'tool_execution')
+    return 'Review capability token validity. Check tool service health and agent permissions matrix.';
+  if (rt === 'param_extraction')
+    return 'Review LLM parameter extraction prompts. Check if tool schema has changed.';
+  if (rt === 'auth_denial')
+    return 'Verify user role assignments in tenant_memberships. Check RLS policies.';
+  return 'Review receipt details and correlated trace for root cause analysis.';
+}
+
 function deriveSeverity(row: Record<string, unknown>): 'P0' | 'P1' | 'P2' | 'P3' {
-  const payload = (row.payload as Record<string, unknown>) ?? {};
-  if (payload.severity) return payload.severity as 'P0' | 'P1' | 'P2' | 'P3';
+  const receiptType = ((row.receipt_type as string) ?? '').toLowerCase();
+  const status = ((row.status as string) ?? '').toLowerCase();
+  const result = (row.result as Record<string, unknown>) ?? {};
+  const errorMsg = ((result.error as string) ?? '').toLowerCase();
 
-  const domain = (row.domain as string) ?? '';
-  const status = (row.status as string) ?? '';
+  // P0 — Security events, expired credentials with revenue impact
+  if (receiptType.startsWith('mail.oauth') || receiptType.includes('security')) return 'P0';
+  if (receiptType.startsWith('stripe') && errorMsg.includes('expired')) return 'P0';
+  if (receiptType === 'auth_denial') return 'P1';
 
-  // Derive severity from domain + status
-  if (domain === 'payments' && status === 'failed') return 'P1';
-  if (domain === 'security') return 'P0';
-  if (status === 'blocked') return 'P2';
+  // P1 — Revenue impact, core pipeline broken
+  if (receiptType.startsWith('stripe') && status === 'failed') return 'P1';
+  if (receiptType === 'orchestrator' && status === 'failed') return 'P1';
+
+  // P2 — Degraded functionality
+  if (receiptType.startsWith('mail.onboarding')) return 'P2';
+  if (receiptType === 'tool_execution') return 'P2';
+  if (receiptType === 'param_extraction') return 'P2';
+  if (receiptType === 'onboarding.profile_update') return 'P2';
+  if (status === 'blocked' || status === 'denied') return 'P2';
+
+  // P3 — Informational
+  if (receiptType.startsWith('domain')) return 'P3';
   return 'P3';
 }
 
-function buildIncidentNotes(payload: Record<string, unknown>): IncidentNote[] {
+function buildIncidentNotes(
+  result: Record<string, unknown>,
+  errorMsg: string,
+): IncidentNote[] {
   const notes: IncidentNote[] = [];
-  if (payload.error_message) {
+  if (errorMsg) {
     notes.push({
       author: 'System',
-      body: payload.error_message as string,
+      body: errorMsg,
       timestamp: new Date().toISOString(),
     });
   }
-  if (payload.llm_analysis) {
+  if (result.stack_trace) {
     notes.push({
-      author: 'Ava (LLM)',
-      body: payload.llm_analysis as string,
+      author: 'System',
+      body: `Stack trace:\n${result.stack_trace as string}`,
       timestamp: new Date().toISOString(),
-      isLLMAnalysis: true,
     });
   }
   return notes;

@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystem } from '@/contexts/SystemContext';
 import { HeroMetricCard } from '@/components/home/HeroMetricCard';
@@ -9,10 +10,11 @@ import { useUnifiedIncidents } from '@/hooks/useUnifiedIncidents';
 import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatCurrency } from '@/lib/formatters';
-import { 
-  DollarSign, 
-  Clock, 
-  Shield, 
+import { supabase } from '@/integrations/supabase/client';
+import {
+  DollarSign,
+  Clock,
+  Shield,
   Users,
   TrendingUp,
   Activity
@@ -41,6 +43,28 @@ export default function Home() {
   const businessMetrics = rawBusinessMetrics ?? defaultBusinessMetrics;
   const runwayBurnData = rawRunwayBurn ?? defaultRunwayBurn;
 
+  // Fetch real receipt counts for task metrics
+  const [receiptStats, setReceiptStats] = useState({ thisWeek: 0, lastWeek: 0 });
+  useEffect(() => {
+    async function fetchReceiptStats() {
+      const now = new Date();
+      const weekStart = new Date(now);
+      weekStart.setDate(weekStart.getDate() - 7);
+      const prevWeekStart = new Date(weekStart);
+      prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+
+      const [thisWeekRes, lastWeekRes] = await Promise.all([
+        supabase.from('receipts').select('*', { count: 'exact', head: true }).gte('created_at', weekStart.toISOString()),
+        supabase.from('receipts').select('*', { count: 'exact', head: true }).gte('created_at', prevWeekStart.toISOString()).lt('created_at', weekStart.toISOString()),
+      ]);
+      setReceiptStats({
+        thisWeek: thisWeekRes.count ?? 0,
+        lastWeek: lastWeekRes.count ?? 0,
+      });
+    }
+    fetchReceiptStats();
+  }, []);
+
   const isLoading = approvalsLoading || incidentsLoading || customersLoading || metricsLoading || runwayLoading;
   if (isLoading) return <PageLoadingState showKPIs kpiCount={3} rows={5} />;
 
@@ -49,9 +73,10 @@ export default function Home() {
   const openIncidents = incidents.filter(i => i.status === 'Open').length;
   const totalMRR = customers.reduce((sum, c) => sum + c.mrr, 0);
 
-  // Mock sparkline data
-  const mrrSparkline = [38000, 39500, 41000, 40200, 43000, 44500, totalMRR];
-  const runwaySparkline = [16.5, 17, 17.2, 17.8, 18.0, 18.2, runwayBurnData.runway];
+  // Real sparkline data from business metrics trend
+  const mrrTrend = businessMetrics.mrrTrend ?? [];
+  const mrrSparkline = mrrTrend.length > 0 ? mrrTrend.map(t => t.mrr) : [totalMRR];
+  const runwaySparkline = [runwayBurnData.runway];
   
   // Determine health status
   const healthStatus = openIncidents === 0 && pendingApprovals < 3 
@@ -92,10 +117,11 @@ export default function Home() {
     return urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
   });
 
-  // Story insights data
+  // Story insights data from real metrics
   const revenueGrowth = businessMetrics.mrrGrowth;
-  const weeklyTasksData = [120, 135, 142, 128, 156, 148, 162];
-  const customerHealthData = [85, 87, 82, 88, 90, 89, 92];
+  const customerHealthData = customers.length > 0
+    ? [customers.filter(c => c.status === 'Active').length]
+    : [0];
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -104,8 +130,8 @@ export default function Home() {
     return 'Good evening';
   };
 
-  // Get formal name (e.g., "Mr. Scott" from "tonioscott39")
-  const formalName = user?.displayName || 'there';
+  // Formal name for greeting
+  const formalName = 'Mr. Scott';
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -201,13 +227,17 @@ export default function Home() {
         />
 
         <StoryInsightCard
-          headline="System handled 162 tasks"
-          subtext="Up from 142 last week"
-          trend="positive"
+          headline={`System handled ${receiptStats.thisWeek.toLocaleString()} tasks`}
+          subtext={receiptStats.lastWeek > 0
+            ? (receiptStats.thisWeek >= receiptStats.lastWeek
+              ? `Up from ${receiptStats.lastWeek.toLocaleString()} last week`
+              : `Down from ${receiptStats.lastWeek.toLocaleString()} last week`)
+            : 'This week'}
+          trend={receiptStats.thisWeek >= receiptStats.lastWeek ? 'positive' : 'negative'}
           chartType="area"
-          chartData={weeklyTasksData}
+          chartData={[receiptStats.lastWeek, receiptStats.thisWeek]}
           icon={<Activity className="h-5 w-5" />}
-          linkTo="/activity"
+          linkTo="/receipts"
           linkLabel="View activity"
         />
       </div>
