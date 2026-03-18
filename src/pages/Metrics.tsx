@@ -44,7 +44,7 @@ function getSuccessRateColor(rate: number): string {
 }
 
 function getLatencyColor(ms: number): string {
-  if (ms <= 200) return 'hsl(187, 82%, 53%)';
+  if (ms <= 200) return 'hsl(217, 91%, 60%)';
   if (ms <= 500) return 'hsl(47, 95%, 55%)';
   return 'hsl(0, 72%, 51%)';
 }

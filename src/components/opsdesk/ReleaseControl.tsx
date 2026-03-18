@@ -1,6 +1,7 @@
 import { useOpsDesk } from '@/contexts/OpsDeskContext';
 import { useSystem } from '@/contexts/SystemContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { Panel } from '@/components/shared/Panel';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,7 +34,26 @@ export function ReleaseControl() {
     isCreatingApproval,
     addReceipt,
   } = useOpsDesk();
-  const approval = createdApprovalId ? { status: 'approved', decisionReason: 'Auto-approved after tests' } : null;
+  // Fetch actual approval status from backend (Law #3: fail closed — never trust local state)
+  const [approval, setApproval] = useState<{ status: string; decisionReason: string } | null>(null);
+  useEffect(() => {
+    if (!createdApprovalId) {
+      setApproval(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('approval_requests')
+        .select('status, decision_reason')
+        .eq('id', createdApprovalId)
+        .single();
+      if (!cancelled && data) {
+        setApproval({ status: data.status as string, decisionReason: (data.decision_reason as string) || '' });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [createdApprovalId]);
   const robotRuns = [
     { env: 'staging', status: currentPatchJob?.state === 'tests_passed' ? 'passed' : 'pending' },
     { env: 'canary', status: currentPatchJob?.state === 'tests_passed' ? 'passed' : 'pending' },

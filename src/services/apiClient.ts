@@ -151,7 +151,7 @@ export async function fetchIncidents(filters?: {
   const { data, error } = await supabase
     .from('receipts')
     .select('receipt_id, receipt_type, status, action, result, correlation_id, suite_id, tenant_id, actor_id, created_at')
-    .in('status', ['failed', 'blocked', 'FAILED', 'BLOCKED', 'DENIED'])
+    .in('status', ['failed', 'blocked', 'denied', 'FAILED', 'BLOCKED', 'DENIED'])
     .not('receipt_type', 'like', 'n8n_%')
     .order('created_at', { ascending: false })
     .limit(2000);
@@ -207,7 +207,9 @@ export async function fetchIncidents(filters?: {
     const incident = mapIncidentRow(row);
     // Enrich with aggregation data
     const isActive = g.latest >= twentyFourHoursAgo;
-    incident.summary = `${incident.summary}${g.count > 1 ? ` (${g.count.toLocaleString()} occurrences)` : ''}`;
+    incident.occurrenceCount = g.count;
+    incident.firstSeen = g.earliest;
+    incident.lastSeen = g.latest;
     incident.notes = [
       ...incident.notes,
       {
@@ -219,32 +221,27 @@ export async function fetchIncidents(filters?: {
     return incident;
   });
 
-  // Sort: P0 first, then P1, then by count (embedded in summary), then newest
+  // Sort: P0 first, then P1, then by occurrence count (highest first), then newest
   const severityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
   incidents.sort((a, b) => {
     const sevDiff = (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4);
     if (sevDiff !== 0) return sevDiff;
+    const countDiff = (b.occurrenceCount ?? 0) - (a.occurrenceCount ?? 0);
+    if (countDiff !== 0) return countDiff;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
-
-  // Apply page/pageSize to aggregated results
-  const page = filters?.page ?? 1;
-  const pageSize = filters?.pageSize ?? 50;
-  const from = (page - 1) * pageSize;
 
   // Severity filter on aggregated results
   if (filters?.severity) {
     incidents = incidents.filter(i => i.severity === filters.severity);
   }
 
-  const total = incidents.length;
-  const paged = incidents.slice(from, from + pageSize);
-
+  // Return ALL aggregated groups (typically 20-80 groups from ~2000 raw rows)
   return {
-    data: paged,
-    count: total,
-    page,
-    pageSize,
+    data: incidents,
+    count: incidents.length,
+    page: 1,
+    pageSize: incidents.length,
   };
 }
 
@@ -270,7 +267,8 @@ export async function fetchN8nIncidents(): Promise<N8nIncidentGroup[]> {
     .select('receipt_type, status, action, result, created_at')
     .in('status', ['FAILED', 'BLOCKED', 'DENIED'])
     .or('receipt_type.eq.n8n_ops,receipt_type.eq.n8n_agent')
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(2000);
 
   if (error) throw new ApiError(`Failed to fetch n8n incidents: ${error.message}`, error.code);
 
@@ -490,6 +488,7 @@ function mapIncidentRow(row: Record<string, unknown>): Incident {
     proofStatus: 'ok',
     recommendedAction: deriveRecommendedAction(receiptType, actionType, errorMsg),
     correlationId: (row.correlation_id as string) ?? undefined,
+    receiptType,
   };
 }
 
@@ -1013,7 +1012,8 @@ export async function fetchBusinessMetrics(): Promise<BusinessMetrics> {
   // Aggregate from suite_profiles
   const { data: suites, error: suitesErr } = await supabase
     .from('suite_profiles')
-    .select('*');
+    .select('*')
+    .limit(1000);
 
   if (suitesErr) {
     devWarn('Business metrics query failed:', suitesErr.message);
@@ -1280,7 +1280,8 @@ export interface AutomationMetricsData {
 export async function fetchAutomationMetrics(): Promise<AutomationMetricsData> {
   const { data: jobs, error } = await supabase
     .from('outbox_jobs')
-    .select('*');
+    .select('*')
+    .limit(2000);
 
   if (error) {
     devWarn('Automation metrics query failed:', error.message);
@@ -1317,7 +1318,8 @@ export async function fetchTrustSpineMetrics(): Promise<TrustSpineMetricsData> {
   const { data, count, error } = await supabase
     .from('receipts')
     .select('status, payload', { count: 'exact' })
-    .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+    .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+    .limit(5000);
 
   if (error) {
     devWarn('Trust spine metrics query failed:', error.message);
@@ -1363,7 +1365,8 @@ export async function fetchRunwayBurn(): Promise<RunwayBurnData> {
     .select('*')
     .eq('event_type', 'charge')
     .gte('created_at', new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString())
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(2000);
 
   if (error || !events?.length) {
     devWarn('Runway/burn data not available:', error?.message ?? 'No finance events');
@@ -1415,7 +1418,8 @@ export async function fetchCostsUsage(): Promise<CostsUsageData> {
   const { data: calls, error } = await supabase
     .from('provider_call_log')
     .select('*')
-    .gte('started_at', thirtyDaysAgo);
+    .gte('started_at', thirtyDaysAgo)
+    .limit(2000);
 
   if (error || !calls?.length) {
     return { totalCost: 0, costChange: 0, vendors: [] };
@@ -1459,7 +1463,8 @@ export async function fetchRevenueAddons(): Promise<RevenueData> {
     .from('finance_events')
     .select('*')
     .in('event_type', ['payment', 'subscription'])
-    .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+    .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+    .limit(2000);
 
   if (error || !events?.length) {
     return { totalRevenue: 0, revenueChange: 0, skus: [] };
@@ -1491,7 +1496,8 @@ export async function fetchSkillPackRegistry(): Promise<PaginatedResult<SkillPac
   const { data: receipts, error } = await supabase
     .from('receipts')
     .select('domain, action_type, status, payload, created_at')
-    .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+    .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+    .limit(5000);
 
   if (error) {
     devWarn('Skill pack registry query failed:', error.message);
@@ -1535,7 +1541,8 @@ export async function fetchSkillPackAnalytics(): Promise<{
   const { data, error } = await supabase
     .from('receipts')
     .select('domain, action_type, status, payload')
-    .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+    .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+    .limit(5000);
 
   if (error) return { usageByPack: [], outcomeDistribution: [] };
 
@@ -1642,7 +1649,8 @@ export interface AudienceInsights {
 export async function fetchAudienceInsights(): Promise<AudienceInsights> {
   const { data: profiles, error } = await supabase
     .from('suite_profiles')
-    .select('*');
+    .select('*')
+    .limit(1000);
 
   const empty: AudienceInsights = {
     totalProfiles: 0, completionRate: 0, topIndustry: 'N/A', topCountry: 'N/A',
@@ -1727,7 +1735,7 @@ export async function fetchAudienceInsights(): Promise<AudienceInsights> {
 // ============================================================================
 export async function listReceipts(filters?: ReceiptFilters): Promise<PaginatedResult<TrustReceipt>> {
   const page = 1;
-  const pageSize = 100;
+  const pageSize = 500;
 
   let query = supabase
     .from('receipts')
@@ -1803,7 +1811,7 @@ export async function listProviderCallLogs(filters?: ProviderCallLogFilters): Pr
     .from('provider_call_log')
     .select('*', { count: 'exact' })
     .order('started_at', { ascending: false })
-    .limit(100);
+    .limit(500);
 
   if (filters?.provider) query = query.eq('provider', filters.provider);
   if (filters?.status) query = query.eq('status', filters.status);

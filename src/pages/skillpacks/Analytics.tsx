@@ -31,8 +31,8 @@ import {
   Legend
 } from 'recharts';
 
-const BAR_COLORS = ['hsl(187, 82%, 53%)', 'hsl(142, 71%, 45%)', 'hsl(262, 83%, 58%)', 'hsl(38, 92%, 50%)', 'hsl(0, 72%, 51%)'];
-const PIE_COLORS = ['hsl(142, 71%, 45%)', 'hsl(0, 72%, 51%)', 'hsl(38, 92%, 50%)', 'hsl(262, 83%, 58%)', 'hsl(187, 82%, 53%)'];
+const BAR_COLORS = ['hsl(217, 91%, 60%)', 'hsl(142, 71%, 45%)', 'hsl(262, 83%, 58%)', 'hsl(38, 92%, 50%)', 'hsl(0, 72%, 51%)'];
+const PIE_COLORS = ['hsl(142, 71%, 45%)', 'hsl(0, 72%, 51%)', 'hsl(38, 92%, 50%)', 'hsl(262, 83%, 58%)', 'hsl(217, 91%, 60%)'];
 
 export default function SkillPackAnalytics() {
   const { viewMode } = useSystem();

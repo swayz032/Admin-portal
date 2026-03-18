@@ -5,23 +5,23 @@
 @layer base {
   :root {
     /* Premium Enterprise Dark Theme */
-    --background: 240 10% 4%;
+    --background: 240 7% 4%;
     --foreground: 0 0% 98%;
     
-    --card: 240 10% 7%;
+    --card: 240 4% 12%;
     --card-foreground: 0 0% 98%;
     
     --popover: 240 10% 8%;
     --popover-foreground: 0 0% 98%;
     
-    --primary: 187 82% 53%;
-    --primary-foreground: 240 10% 4%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
     
     --secondary: 240 8% 12%;
     --secondary-foreground: 0 0% 90%;
     
     --muted: 240 6% 18%;
-    --muted-foreground: 0 0% 65%;
+    --muted-foreground: 240 5% 82%;
     
     --accent: 240 8% 14%;
     --accent-foreground: 0 0% 95%;
@@ -35,41 +35,41 @@
     --warning: 38 92% 50%;
     --warning-foreground: 240 10% 4%;
     
-    --border: 240 6% 15%;
+    --border: 240 3% 18%;
     --input: 240 8% 12%;
-    --ring: 187 82% 53%;
+    --ring: 217 91% 60%;
     
     --radius: 0.625rem;
     
     /* Premium Surface variants */
-    --surface-1: 240 10% 7%;
-    --surface-2: 240 8% 10%;
-    --surface-3: 240 7% 13%;
+    --surface-1: 240 4% 12%;
+    --surface-2: 240 3% 15%;
+    --surface-3: 240 3% 18%;
     
     /* Text variants */
     --text-primary: 0 0% 98%;
-    --text-secondary: 0 0% 70%;
-    --text-tertiary: 0 0% 50%;
+    --text-secondary: 240 5% 82%;
+    --text-tertiary: 240 3% 44%;
     
     /* Premium Sidebar */
-    --sidebar-background: 240 10% 5%;
-    --sidebar-foreground: 0 0% 70%;
-    --sidebar-primary: 187 82% 53%;
-    --sidebar-primary-foreground: 240 10% 4%;
+    --sidebar-background: 240 7% 4%;
+    --sidebar-foreground: 240 5% 82%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 240 8% 12%;
     --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 240 6% 12%;
-    --sidebar-ring: 187 82% 53%;
+    --sidebar-border: 240 3% 18%;
+    --sidebar-ring: 217 91% 60%;
     
     /* Premium Effects */
     --glass-bg: 240 10% 8% / 0.8;
     --glass-border: 0 0% 100% / 0.06;
-    --glow-primary: 187 82% 53% / 0.15;
+    --glow-primary: 217 91% 60% / 0.15;
     --shadow-premium: 0 4px 24px -4px hsl(0 0% 0% / 0.5);
   }
 
   .dark {
-    --background: 240 10% 4%;
+    --background: 240 7% 4%;
     --foreground: 0 0% 98%;
   }
 }
@@ -267,7 +267,7 @@
   }
   
   .severity-p2 {
-    @apply bg-primary/80 text-black;
+    @apply bg-primary/80 text-white;
   }
   
   .severity-p3 {
@@ -373,7 +373,7 @@
   
   /* Gradient text */
   .text-gradient {
-    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(187 82% 70%) 100%);
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(217 91% 75%) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

@@ -143,8 +143,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user_id: user?.id || null,
         ip_address: null,
       });
-    } catch {
+    } catch (err) {
       // Don't block logout if audit logging fails
+      if (import.meta.env.DEV) console.warn('audit_log insert failed:', err);
     }
     await signOut();
   }, [signOut, user?.id]);

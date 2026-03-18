@@ -20,21 +20,40 @@ import type {
 } from '@/contracts/control-plane';
 
 // ============================================================================
-// RECEIPT EMISSION (Law #2)
+// RECEIPT EMISSION (Law #2) — persisted to Supabase audit_log + window event
 // ============================================================================
 
-function emitControlPlaneReceipt(action: string, outcome: 'Success' | 'Failed', detail?: string): void {
+async function getAuthUserId(): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user?.id ?? 'unknown';
+}
+
+async function emitControlPlaneReceipt(action: string, outcome: 'Success' | 'Failed', detail?: string): Promise<void> {
+  const userId = await getAuthUserId();
+  const receiptPayload = {
+    action,
+    outcome,
+    actor: userId,
+    receiptType: 'control_plane',
+    summary: detail,
+    timestamp: new Date().toISOString(),
+  };
+
+  // Persist to audit_log (primary — Law #2)
+  try {
+    await supabase.from('audit_log').insert({
+      user_id: userId !== 'unknown' ? userId : null,
+      event: `control_plane.${action}`,
+      details: receiptPayload,
+      ip_address: null,
+    });
+  } catch (err) {
+    devError('Failed to persist control plane receipt:', err);
+  }
+
+  // Also emit window event for in-page listeners (secondary)
   if (typeof window !== 'undefined' && window.dispatchEvent) {
-    window.dispatchEvent(new CustomEvent('aspire:receipt', {
-      detail: {
-        action,
-        outcome,
-        actor: 'admin',
-        receiptType: 'control_plane',
-        summary: detail,
-        timestamp: new Date().toISOString(),
-      },
-    }));
+    window.dispatchEvent(new CustomEvent('aspire:receipt', { detail: receiptPayload }));
   }
 }
 
@@ -104,6 +123,7 @@ export async function getRegistryItem(id: string): Promise<RegistryItem | null> 
 
 export async function createDraftRegistryItem(state: BuilderState): Promise<RegistryItem> {
   const dbRiskTier = state.risk_tier === 'high' ? 'red' : state.risk_tier === 'medium' ? 'yellow' : 'green';
+  const userId = await getAuthUserId();
 
   const { data, error } = await supabase
     .from('agent_registry')
@@ -113,7 +133,7 @@ export async function createDraftRegistryItem(state: BuilderState): Promise<Regi
       type: 'agent',
       status: 'pending_review',
       version: '0.1.0',
-      owner: 'current-user',
+      owner: userId,
       category: state.category,
       risk_tier: dbRiskTier,
       approval_required: state.approval_required,
@@ -231,11 +251,12 @@ export async function getRollout(id: string): Promise<Rollout | null> {
 }
 
 export async function createRollout(payload: Partial<Rollout>): Promise<Rollout> {
+  const userId = await getAuthUserId();
   const historyEntry = {
     timestamp: new Date().toISOString(),
     action: 'created',
     percentage: payload.percentage || 0,
-    actor: 'current-user',
+    actor: userId,
   };
 
   const { data, error } = await supabase
@@ -246,7 +267,7 @@ export async function createRollout(payload: Partial<Rollout>): Promise<Rollout>
       environment: payload.environment || 'staging',
       percentage: payload.percentage || 0,
       status: 'active',
-      created_by: 'current-user',
+      created_by: userId,
       history: [historyEntry],
     })
     .select()
@@ -265,11 +286,12 @@ export async function setRolloutPercentage(rolloutId: string, percentage: number
   const existing = await getRollout(rolloutId);
   if (!existing) throw new Error(`Rollout ${rolloutId} not found`);
 
+  const userId = await getAuthUserId();
   const historyEntry = {
     timestamp: new Date().toISOString(),
     action: 'percentage_changed',
     percentage,
-    actor: 'current-user',
+    actor: userId,
   };
 
   const { data, error } = await supabase
@@ -297,11 +319,12 @@ export async function pauseRollout(rolloutId: string): Promise<Rollout> {
   const existing = await getRollout(rolloutId);
   if (!existing) throw new Error(`Rollout ${rolloutId} not found`);
 
+  const userId = await getAuthUserId();
   const historyEntry = {
     timestamp: new Date().toISOString(),
     action: 'paused',
     percentage: existing.percentage,
-    actor: 'current-user',
+    actor: userId,
   };
 
   const { data, error } = await supabase
@@ -390,7 +413,7 @@ export async function proposeConfigChange(
       status: 'pending',
       summary: payload.summary || 'Configuration change proposal',
       diff: payload.diff || { before: {}, after: {} },
-      requested_by: 'current-user',
+      requested_by: await getAuthUserId(),
       correlation_id: payload.correlation_id || null,
     })
     .select()

@@ -46,7 +46,7 @@ export function HeroMetricCard({
     success: 'hsl(142, 71%, 45%)',
     warning: 'hsl(38, 92%, 50%)',
     critical: 'hsl(0, 72%, 51%)',
-    neutral: 'hsl(187, 82%, 53%)',
+    neutral: 'hsl(217, 91%, 60%)',
   };
 
   const TrendIcon = trend?.direction === 'up' ? TrendingUp : trend?.direction === 'down' ? TrendingDown : Minus;

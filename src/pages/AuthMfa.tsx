@@ -260,7 +260,7 @@ export default function AuthMfa() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="fixed inset-0 pointer-events-none" style={{
-        background: 'radial-gradient(ellipse at 50% 0%, hsl(187 82% 53% / 0.04) 0%, transparent 60%)',
+        background: 'radial-gradient(ellipse at 50% 0%, hsl(217 91% 60% / 0.04) 0%, transparent 60%)',
       }} />
 
       <div className="relative w-full max-w-sm px-6">

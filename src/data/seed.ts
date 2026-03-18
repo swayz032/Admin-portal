@@ -31,6 +31,10 @@ export interface Incident {
   proofStatus: 'ok' | 'missing' | 'pending';
   recommendedAction?: string;
   correlationId?: string;
+  receiptType?: string;
+  occurrenceCount?: number;
+  firstSeen?: string;
+  lastSeen?: string;
 }
 
 export interface IncidentNote {

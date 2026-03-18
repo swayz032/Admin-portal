@@ -33,7 +33,7 @@ import {
 } from 'recharts';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
-const BAR_COLORS = ['hsl(187, 82%, 53%)', 'hsl(142, 71%, 45%)', 'hsl(262, 83%, 58%)', 'hsl(38, 92%, 50%)', 'hsl(0, 72%, 51%)'];
+const BAR_COLORS = ['hsl(217, 91%, 60%)', 'hsl(142, 71%, 45%)', 'hsl(262, 83%, 58%)', 'hsl(38, 92%, 50%)', 'hsl(0, 72%, 51%)'];
 
 // Map API channel shape to display-friendly type
 type ApiChannel = AcquisitionData['channels'][number];
@@ -195,7 +195,7 @@ export default function AcquisitionAnalytics() {
                             color: 'rgba(255,255,255,0.92)'
                           }}
                         />
-                        <Bar dataKey="signups" fill="hsl(187, 82%, 53%)" name="Signups" />
+                        <Bar dataKey="signups" fill="hsl(217, 91%, 60%)" name="Signups" />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -254,7 +254,7 @@ export default function AcquisitionAnalytics() {
                               color: 'rgba(255,255,255,0.92)'
                             }}
                           />
-                          <Bar dataKey="count" fill="hsl(187, 82%, 53%)" name="Signups" />
+                          <Bar dataKey="count" fill="hsl(217, 91%, 60%)" name="Signups" />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>

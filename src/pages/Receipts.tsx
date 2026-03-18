@@ -8,24 +8,28 @@ import { PurposeStrip } from '@/components/shared/PurposeStrip';
 import { SystemPipelineCard } from '@/components/shared/SystemPipelineCard';
 import { GlossaryTooltip } from '@/components/shared/GlossaryTooltip';
 import { ModeText } from '@/components/shared/ModeText';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { SourceBadge, deriveSourceCategory } from '@/components/shared/SourceBadge';
+import { CopyableId } from '@/components/shared/CopyableId';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Receipt, ReceiptStatus } from '@/contracts';
 import { listReceipts } from '@/services/apiClient';
 import { formatTimeAgo } from '@/lib/formatters';
-import { 
-  FileText, 
-  Search, 
-  Filter, 
-  ChevronRight, 
+import { formatReceiptId, formatCorrelationId } from '@/lib/premiumIds';
+import { redactPayload } from '@/lib/redactPayload';
+import {
+  FileText,
+  Search,
   ExternalLink,
   Copy,
   Check
@@ -40,7 +44,8 @@ export default function Receipts() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [providerFilter, setProviderFilter] = useState<string>('all');
   const [domainFilter, setDomainFilter] = useState<string>('all');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const { copiedId, copyToClipboard } = useCopyToClipboard();
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadReceipts();
@@ -48,11 +53,13 @@ export default function Receipts() {
 
   const loadReceipts = async () => {
     setLoading(true);
+    setError(null);
     try {
       const result = await listReceipts();
       setReceipts(result.data ?? []);
-    } catch {
+    } catch (err) {
       setReceipts([]);
+      setError(err instanceof Error ? err.message : 'Failed to load receipts');
     }
     setLoading(false);
   };
@@ -75,36 +82,23 @@ export default function Receipts() {
 
   // Get unique domains from data for dynamic filtering
   const domains = [...new Set(receipts.map(r => r.domain))].sort();
-  
+
   // Known domains for special styling
   const KNOWN_DOMAINS = ['payments', 'security', 'billing', 'integrations', 'webhooks', 'deploy', 'slo', 'alert', 'backup', 'restore', 'dr', 'entitlement', 'rbac'];
-  
+
   // Domain counts for facets
   const domainCounts = domains.reduce((acc, domain) => {
     acc[domain] = receipts.filter(r => r.domain === domain).length;
     return acc;
   }, {} as Record<string, number>);
 
-  // Group by correlation_id
-  const groupedReceipts = filteredReceipts.reduce((acc, receipt) => {
-    const key = receipt.correlation_id;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(receipt);
-    return acc;
-  }, {} as Record<string, Receipt[]>);
-
   const providers = [...new Set(receipts.map(r => r.provider).filter(Boolean))];
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(text);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
 
   const getStatusColor = (status: ReceiptStatus): 'success' | 'warning' | 'critical' | 'info' => {
     switch (status) {
       case 'success': return 'success';
       case 'blocked': return 'warning';
+      case 'denied': return 'warning';
       case 'failed': return 'critical';
       default: return 'info';
     }
@@ -131,13 +125,13 @@ export default function Receipts() {
   };
 
   const columns = viewMode === 'operator' ? [
-    { 
-      key: 'created_at', 
-      header: 'When', 
-      render: (r: Receipt) => <span className="text-muted-foreground">{formatTimeAgo(r.created_at)}</span> 
+    {
+      key: 'created_at',
+      header: 'When',
+      render: (r: Receipt) => <span className="text-muted-foreground">{formatTimeAgo(r.created_at)}</span>
     },
-    { 
-      key: 'domain', 
+    {
+      key: 'domain',
       header: 'Type',
       render: (r: Receipt) => {
         const badge = getDomainBadge(r.domain);
@@ -150,52 +144,47 @@ export default function Receipts() {
     },
     { key: 'action_type', header: 'What happened' },
     { key: 'provider', header: 'Service', render: (r: Receipt) => r.provider || 'Internal' },
-    { 
-      key: 'status', 
-      header: 'Result', 
+    {
+      key: 'status',
+      header: 'Result',
       render: (r: Receipt) => (
-        <StatusChip 
-          status={getStatusColor(r.status)} 
-          label={r.status === 'success' ? 'Completed' : r.status === 'blocked' ? 'Stopped' : 'Failed'} 
+        <StatusChip
+          status={getStatusColor(r.status)}
+          label={r.status === 'success' ? 'Completed' : r.status === 'blocked' ? 'Stopped' : 'Failed'}
         />
-      ) 
-    },
-  ] : [
-    { 
-      key: 'id', 
-      header: 'Receipt ID', 
-      render: (r: Receipt) => (
-        <span className="font-mono text-xs text-muted-foreground">{r.id}</span>
       )
     },
-    { 
-      key: 'created_at', 
-      header: 'Timestamp', 
-      render: (r: Receipt) => <span className="text-muted-foreground text-xs">{new Date(r.created_at).toLocaleString()}</span> 
+  ] : [
+    {
+      key: 'id',
+      header: 'Receipt ID',
+      render: (r: Receipt) => <CopyableId fullId={r.id} displayId={formatReceiptId(r.id)} isCopied={copiedId === r.id} onCopy={copyToClipboard} />
+    },
+    {
+      key: 'created_at',
+      header: 'Timestamp',
+      render: (r: Receipt) => <span className="text-muted-foreground text-xs">{new Date(r.created_at).toLocaleString()}</span>
+    },
+    {
+      key: 'origin',
+      header: 'Origin',
+      render: (r: Receipt) => <SourceBadge source={deriveSourceCategory(r.receipt_type ?? r.domain ?? '')} />,
     },
     { key: 'domain', header: 'Domain' },
     { key: 'action_type', header: 'Action Type' },
-    { 
-      key: 'status', 
-      header: 'Status', 
+    {
+      key: 'status',
+      header: 'Status',
       render: (r: Receipt) => (
         <StatusChip status={getStatusColor(r.status)} label={r.status} />
-      ) 
+      )
     },
     {
       key: 'correlation_id',
-      header: 'Correlation ID',
-      render: (r: Receipt) => (
-        <Link
-          to={`/trace/${r.correlation_id}`}
-          onClick={(e) => e.stopPropagation()}
-          className="font-mono text-xs text-primary hover:underline flex items-center gap-1"
-          title={`View trace for ${r.correlation_id}`}
-        >
-          {r.correlation_id.slice(0, 12)}...
-          <ExternalLink className="h-3 w-3" />
-        </Link>
-      )
+      header: 'Trace',
+      render: (r: Receipt) => r.correlation_id
+        ? <CopyableId fullId={r.correlation_id} displayId={formatCorrelationId(r.correlation_id)} isCopied={copiedId === r.correlation_id} onCopy={copyToClipboard} linkTo={`/trace/${r.correlation_id}`} />
+        : <span className="text-muted-foreground text-xs">-</span>
     },
   ];
 
@@ -206,9 +195,9 @@ export default function Receipts() {
           <ModeText operator="Proof Log" engineer="Receipts" />
         </h1>
         <p className="page-subtitle">
-          <ModeText 
-            operator="A record of everything that happened in your system" 
-            engineer="Canonical Receipt objects with full audit trail" 
+          <ModeText
+            operator="A record of everything that happened in your system"
+            engineer="Canonical Receipt objects with full audit trail"
           />
         </p>
       </div>
@@ -222,6 +211,16 @@ export default function Receipts() {
       />
 
       <SystemPipelineCard variant="compact" highlightStep={6} />
+
+      {error && (
+        <EmptyState
+          variant="error"
+          title="Failed to load receipts"
+          description={error}
+          actionLabel="Retry"
+          onAction={loadReceipts}
+        />
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
@@ -243,6 +242,7 @@ export default function Receipts() {
             <SelectItem value="success">Success</SelectItem>
             <SelectItem value="failed">Failed</SelectItem>
             <SelectItem value="blocked">Blocked</SelectItem>
+            <SelectItem value="denied">Denied</SelectItem>
           </SelectContent>
         </Select>
         <Select value={providerFilter} onValueChange={setProviderFilter}>
@@ -272,7 +272,7 @@ export default function Receipts() {
       </div>
 
       {/* Receipts Table */}
-      <Panel>
+      <Panel noPadding>
         {loading ? (
           <div className="loading-state">Loading receipts...</div>
         ) : filteredReceipts.length === 0 ? (
@@ -282,9 +282,9 @@ export default function Receipts() {
               <ModeText operator="No proof records found" engineer="No receipts match filters" />
             </h3>
             <p className="text-muted-foreground text-sm">
-              <ModeText 
-                operator="Try adjusting your search or filters" 
-                engineer="Adjust filters or clear search term" 
+              <ModeText
+                operator="Try adjusting your search or filters"
+                engineer="Adjust filters or clear search term"
               />
             </p>
           </div>
@@ -294,6 +294,7 @@ export default function Receipts() {
             columns={columns}
             keyExtractor={(r) => r.id}
             onRowClick={(receipt) => setSelectedReceipt(receipt)}
+            resultLabel="receipts"
           />
         )}
       </Panel>
@@ -308,14 +309,14 @@ export default function Receipts() {
                   <ModeText operator="Proof Details" engineer="Receipt Details" />
                 </SheetTitle>
               </SheetHeader>
-              
+
               <div className="mt-6 space-y-6">
                 {/* Status */}
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Status</span>
-                  <StatusChip 
-                    status={getStatusColor(selectedReceipt.status)} 
-                    label={selectedReceipt.status} 
+                  <StatusChip
+                    status={getStatusColor(selectedReceipt.status)}
+                    label={selectedReceipt.status}
                   />
                 </div>
 
@@ -346,7 +347,12 @@ export default function Receipts() {
                     <div className="border-t border-border pt-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Receipt ID</span>
-                        <code className="text-xs bg-surface-2 px-2 py-1 rounded">{selectedReceipt.id}</code>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs font-bold text-primary">{formatReceiptId(selectedReceipt.id)}</code>
+                          <button onClick={() => copyToClipboard(selectedReceipt.id)} className="text-muted-foreground hover:text-foreground">
+                            {copiedId === selectedReceipt.id ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
+                          </button>
+                        </div>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Suite ID</span>
@@ -357,12 +363,12 @@ export default function Receipts() {
                         <code className="text-xs bg-surface-2 px-2 py-1 rounded">{selectedReceipt.office_id}</code>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Correlation ID</span>
+                        <span className="text-sm text-muted-foreground">Correlation</span>
                         <Link
                           to={`/trace/${selectedReceipt.correlation_id}`}
                           className="text-xs bg-surface-2 px-2 py-1 rounded font-mono text-primary hover:bg-surface-3 flex items-center gap-1"
                         >
-                          {selectedReceipt.correlation_id}
+                          {formatCorrelationId(selectedReceipt.correlation_id)}
                           <ExternalLink className="h-3 w-3" />
                         </Link>
                       </div>
@@ -378,7 +384,7 @@ export default function Receipts() {
                     <div className="border-t border-border pt-4">
                       <h4 className="text-sm font-medium mb-2">Payload</h4>
                       <pre className="text-xs bg-surface-2 p-3 rounded-lg overflow-x-auto max-h-48">
-                        {JSON.stringify(selectedReceipt.payload, null, 2)}
+                        {JSON.stringify(redactPayload(selectedReceipt.payload), null, 2)}
                       </pre>
                     </div>
                   </>
@@ -388,7 +394,7 @@ export default function Receipts() {
                   <div className="border-t border-border pt-4">
                     <h4 className="text-sm font-medium mb-2">What this means</h4>
                     <p className="text-sm text-muted-foreground">
-                      {selectedReceipt.status === 'success' 
+                      {selectedReceipt.status === 'success'
                         ? 'This action completed successfully and is recorded as proof.'
                         : selectedReceipt.status === 'blocked'
                         ? 'This action was stopped by a safety rule before it could complete.'

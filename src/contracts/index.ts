@@ -8,7 +8,7 @@
 // ============================================================================
 // RECEIPT - Proof of what happened
 // ============================================================================
-export type ReceiptStatus = 'success' | 'failed' | 'blocked' | 'pending';
+export type ReceiptStatus = 'success' | 'failed' | 'blocked' | 'pending' | 'denied';
 
 export interface Receipt {
   id: string;
@@ -22,6 +22,7 @@ export interface Receipt {
   payload: Record<string, unknown>;
   provider?: string;
   request_id?: string;
+  receipt_type?: string;
 }
 
 export interface ReceiptFilters {

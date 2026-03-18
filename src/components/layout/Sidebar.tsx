@@ -244,17 +244,12 @@ export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
         )}>
           {!isCollapsed && (
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-                <span className="text-primary font-semibold text-[10px]">A</span>
-              </div>
-              <span className="font-semibold text-sm text-foreground tracking-tight">Aspire</span>
+              <img src="/aspire-logo-full.png" alt="Aspire" height={22} className="h-[22px] w-auto object-contain" />
             </div>
           )}
 
           {isCollapsed && (
-            <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-              <span className="text-primary font-semibold text-[10px]">A</span>
-            </div>
+            <img src="/aspire-logo-full.png" alt="Aspire" width={24} height={24} className="w-6 h-6 object-contain" />
           )}
 
           <Button

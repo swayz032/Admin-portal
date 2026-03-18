@@ -1,16 +1,25 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-correlation-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-  "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Content-Security-Policy": "frame-ancestors 'none'",
-  "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
-};
+const ALLOWED_ORIGINS = (Deno.env.get("ADMIN_PORTAL_ORIGIN") || "https://admin.aspireos.app").split(",").map(s => s.trim());
+
+function getCorsOrigin(req: Request): string {
+  const origin = req.headers.get("origin") || "";
+  return ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+}
+
+function makeCorsHeaders(req: Request) {
+  return {
+    "Access-Control-Allow-Origin": getCorsOrigin(req),
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-correlation-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Content-Security-Policy": "frame-ancestors 'none'",
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+  };
+}
 
 // Simple in-memory rate limiter
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -41,11 +50,12 @@ function jsonResponse(
   body: Record<string, unknown>,
   status: number,
   correlationId: string,
+  headers: Record<string, string>,
 ): Response {
   return new Response(JSON.stringify({ ...body, correlation_id: correlationId }), {
     status,
     headers: {
-      ...corsHeaders,
+      ...headers,
       "Content-Type": "application/json",
       "x-correlation-id": correlationId,
     },
@@ -54,6 +64,8 @@ function jsonResponse(
 
 serve(async (req: Request) => {
   const correlationId = req.headers.get("x-correlation-id") || crypto.randomUUID();
+  const corsHeaders = makeCorsHeaders(req);
+
   if (req.method === "OPTIONS") {
     return new Response(null, {
       headers: { ...corsHeaders, "x-correlation-id": correlationId },
@@ -63,12 +75,12 @@ serve(async (req: Request) => {
   try {
     const ip = req.headers.get("x-forwarded-for") || "unknown";
     if (!checkRateLimit(ip)) {
-      return jsonResponse({ error: "Rate limit exceeded" }, 429, correlationId);
+      return jsonResponse({ error: "Rate limit exceeded" }, 429, correlationId, corsHeaders);
     }
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return jsonResponse({ error: "Unauthorized" }, 401, correlationId);
+      return jsonResponse({ error: "Unauthorized" }, 401, correlationId, corsHeaders);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -85,6 +97,7 @@ serve(async (req: Request) => {
         { error: "Function misconfigured", code: "CONFIG_ERROR", missing_env: missingEnv },
         500,
         correlationId,
+        corsHeaders,
       );
     }
     const resolvedSupabaseUrl = supabaseUrl as string;
@@ -99,7 +112,7 @@ serve(async (req: Request) => {
     const { data: { user }, error: userError } = await userClient.auth.getUser();
     if (userError || !user) {
       console.warn("auth-session invalid session", { correlationId, userError: userError?.message });
-      return jsonResponse({ error: "Invalid session" }, 401, correlationId);
+      return jsonResponse({ error: "Invalid session" }, 401, correlationId, corsHeaders);
     }
 
     const userId = user.id;
@@ -219,6 +232,6 @@ serve(async (req: Request) => {
     );
   } catch (error) {
     console.error("auth-session error:", { correlationId, error });
-    return jsonResponse({ error: "Internal server error" }, 500, correlationId);
+    return jsonResponse({ error: "Internal server error" }, 500, correlationId, corsHeaders);
   }
 });

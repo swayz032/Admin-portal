@@ -41,7 +41,7 @@ export function StoryInsightCard({
   const trendColors = {
     positive: 'hsl(142, 71%, 45%)',
     negative: 'hsl(0, 72%, 51%)',
-    neutral: 'hsl(187, 82%, 53%)',
+    neutral: 'hsl(217, 91%, 60%)',
   };
 
   const TrendIcon = trend === 'positive' ? TrendingUp : trend === 'negative' ? TrendingDown : Sparkles;

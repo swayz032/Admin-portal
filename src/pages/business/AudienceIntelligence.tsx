@@ -14,7 +14,7 @@ import {
   ResponsiveContainer, Cell, PieChart, Pie
 } from 'recharts';
 
-const COLORS = ['hsl(187, 82%, 53%)', 'hsl(142, 71%, 45%)', 'hsl(262, 83%, 58%)', 'hsl(38, 92%, 50%)', 'hsl(0, 72%, 51%)', 'hsl(210, 70%, 55%)', 'hsl(330, 65%, 50%)', 'hsl(170, 60%, 45%)'];
+const COLORS = ['hsl(217, 91%, 60%)', 'hsl(142, 71%, 45%)', 'hsl(262, 83%, 58%)', 'hsl(38, 92%, 50%)', 'hsl(0, 72%, 51%)', 'hsl(210, 70%, 55%)', 'hsl(330, 65%, 50%)', 'hsl(170, 60%, 45%)'];
 
 function BarChartPanel({ title, data, dataKey = 'count', nameKey = 'label' }: {
   title: string;
@@ -202,7 +202,7 @@ export default function AudienceIntelligence() {
                       contentStyle={{ backgroundColor: 'hsl(0, 0%, 10%)', border: '1px solid hsl(0, 0%, 20%)', borderRadius: '8px' }}
                       labelStyle={{ color: 'hsl(0, 0%, 90%)' }}
                     />
-                    <Bar dataKey="count" fill="hsl(187, 82%, 53%)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="count" fill="hsl(217, 91%, 60%)" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
