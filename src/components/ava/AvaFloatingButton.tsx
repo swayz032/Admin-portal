@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { MessageCircle, X } from 'lucide-react';
-import { AvaQuickPanel } from './AvaQuickPanel';
+import { Mic, X } from 'lucide-react';
+import { VoiceModal } from '@/components/admin-ava/VoiceModal';
 
 interface AvaFloatingButtonProps {
   hasNotifications?: boolean;
@@ -13,38 +13,29 @@ export function AvaFloatingButton({ hasNotifications = false, notificationCount 
 
   return (
     <>
-      {/* Floating Button */}
+      {/* Floating Ava Button — Aspire Blue, opens real voice modal */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
           'fixed bottom-6 right-6 z-50',
           'w-14 h-14 rounded-full',
-          'bg-gradient-to-br from-primary to-primary/80',
-          'shadow-lg shadow-primary/25',
+          'shadow-lg',
           'flex items-center justify-center',
           'transition-all duration-300',
-          'hover:scale-110 hover:shadow-xl hover:shadow-primary/30',
-          'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background',
-          isOpen && 'rotate-180 bg-muted'
+          'hover:scale-110 hover:shadow-xl',
+          'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background',
+          isOpen
+            ? 'bg-muted/80 shadow-muted/25 focus:ring-muted'
+            : 'bg-[#3B82F6] shadow-[#3B82F6]/25 hover:shadow-[#3B82F6]/40 focus:ring-[#3B82F6]'
         )}
-        aria-label={isOpen ? 'Close Ava assistant' : 'Open Ava assistant'}
+        aria-label={isOpen ? 'Close Ava voice assistant' : 'Open Ava voice assistant'}
       >
-        {/* Animated orb background */}
-        <div 
-          className={cn(
-            'absolute inset-0 rounded-full',
-            'bg-gradient-to-br from-primary/50 to-transparent',
-            'animate-glow-pulse',
-            isOpen && 'opacity-0'
-          )} 
-        />
-        
         {/* Icon */}
         <div className="relative z-10">
           {isOpen ? (
             <X className="h-6 w-6 text-muted-foreground" />
           ) : (
-            <MessageCircle className="h-6 w-6 text-primary-foreground" />
+            <Mic className="h-6 w-6 text-white" />
           )}
         </div>
 
@@ -57,14 +48,14 @@ export function AvaFloatingButton({ hasNotifications = false, notificationCount 
           </div>
         )}
 
-        {/* Pulse ring animation */}
+        {/* Subtle pulse ring */}
         {!isOpen && (
-          <div className="absolute inset-0 rounded-full border-2 border-primary animate-ping opacity-20" />
+          <div className="absolute inset-0 rounded-full border-2 border-[#3B82F6] animate-ping opacity-20" />
         )}
       </button>
 
-      {/* Quick Panel */}
-      <AvaQuickPanel isOpen={isOpen} onClose={() => setIsOpen(false)} />
+      {/* Real Ava Voice Modal */}
+      <VoiceModal open={isOpen} onClose={() => setIsOpen(false)} />
     </>
   );
 }

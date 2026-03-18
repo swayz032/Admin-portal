@@ -14,7 +14,7 @@ import {
   Zap,
   CheckCircle,
 } from 'lucide-react';
-import avaOrbVideo from '@/assets/ava-orb-video.mp4';
+const avaOrbVideo = '/ava-orb.mp4';
 import { cn } from '@/lib/utils';
 
 const automationModeLabels: Record<AutomationMode, { label: string; icon: React.ReactNode; description: string }> = {

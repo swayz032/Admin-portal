@@ -1,14 +1,13 @@
 /**
- * PersonaOrb — real video orb with float/pulse/glow animations.
+ * PersonaOrb — real video orb with float/pulse animations.
  *
- * Direct port of OrbVideo from canvas mode AgentWidget.
- * Plays ava-orb-video.mp4 in a circular mask with CSS animations.
+ * Uses ava-orb.mp4 from public/ — renders transparently without
+ * circular mask or container background.
  */
 
 import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import type { VoiceOrbState } from '@/hooks/useAdminVoice';
-import avaOrbVideo from '@/assets/ava-orb-video.mp4';
 
 interface PersonaOrbProps {
   state: VoiceOrbState;
@@ -48,25 +47,22 @@ export function PersonaOrb({ state, size = 280, className }: PersonaOrbProps) {
             isActive && 'animate-[orb-pulse_1.4s_ease-in-out_infinite]',
           )}
         >
-          {/* Circular video mask */}
-          <div
-            className="rounded-full overflow-hidden relative"
-            style={{ width: size, height: size }}
-          >
-            <video
-              ref={videoRef}
-              src={avaOrbVideo}
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="w-full h-full object-cover block"
-              style={{
-                /* Hide native controls */
-                pointerEvents: 'none',
-              }}
-            />
-          </div>
+          {/* Transparent video — no circular mask, no container bg */}
+          <video
+            ref={videoRef}
+            src="/ava-orb.mp4"
+            autoPlay
+            loop
+            muted
+            playsInline
+            style={{
+              width: size,
+              height: size,
+              objectFit: 'contain',
+              pointerEvents: 'none',
+              display: 'block',
+            }}
+          />
         </div>
       </div>
     </div>
@@ -95,7 +91,7 @@ export function MiniOrb({ size = 28, className }: { size?: number; className?: s
     >
       <video
         ref={videoRef}
-        src={avaOrbVideo}
+        src="/ava-orb.mp4"
         autoPlay
         loop
         muted

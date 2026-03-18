@@ -1,15 +1,18 @@
 /**
- * Admin voice pipeline hook — browser-compatible port of useAgentVoice.ts.
+ * Admin voice pipeline hook — browser-compatible.
  *
- * Manages: STT (ElevenLabs Scribe via server proxy), TTS (WebSocket),
- * orchestrator communication (POST /v1/intents), and orb state transitions.
+ * Pipeline: Mic → STT (backend proxy) → LLM chat (SSE) → TTS (HTTP stream) → Speaker
+ *
+ * Backend endpoints:
+ *   POST /admin/ops/voice/stt      → { transcript }
+ *   POST /admin/ops/chat           → SSE stream (delta events)
+ *   POST /admin/ops/voice/tts/stream → audio/mpeg stream
  *
  * Agent fixed to `ava`. No Expo dependencies.
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { TtsWebSocket } from '@/lib/tts-websocket';
-import { getAdminToken, getSuiteId } from '@/lib/adminAuth';
+import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 import { useElevenLabsSTT } from './useElevenLabsSTT';
 
 export type VoiceOrbState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
@@ -34,8 +37,6 @@ interface UseAdminVoiceResult {
   isMuted: boolean;
 }
 
-const AVA_VOICE_ID = 'uYXf8XasLslADfZ2MB4u';
-
 export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResult {
   const emitReceipt = options?.onReceipt;
   const [orbState, setOrbState] = useState<VoiceOrbState>('idle');
@@ -44,56 +45,56 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
   const [error, setError] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
 
-  const ttsRef = useRef<TtsWebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const audioQueueRef = useRef<Uint8Array[]>([]);
-  const isPlayingRef = useRef(false);
-  const currentContextRef = useRef<string | null>(null);
+  const currentAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const stt = useElevenLabsSTT();
   const sttRef = useRef(stt);
   sttRef.current = stt;
 
-  // ── Audio playback ────────────────────────────────────────────────
-  const playNextChunk = useCallback(async () => {
-    if (audioQueueRef.current.length === 0 || isPlayingRef.current) return;
-
-    isPlayingRef.current = true;
-    const chunk = audioQueueRef.current.shift()!;
-
+  // ── Play TTS audio from HTTP streaming endpoint ───────────────────
+  const playTtsAudio = useCallback(async (text: string) => {
     try {
+      setOrbState('speaking');
+
+      const response = await fetch(buildOpsFacadeUrl('/admin/ops/voice/tts/stream'), {
+        method: 'POST',
+        headers: {
+          ...buildOpsHeaders({ includeJson: true, includeAdminToken: true, includeSuiteId: false }),
+        },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!response.ok) {
+        console.warn('[AdminVoice] TTS stream error:', response.status);
+        setOrbState('listening');
+        return;
+      }
+
+      // Collect entire audio response then play
+      const audioBytes = await response.arrayBuffer();
+
       if (!audioContextRef.current) {
         audioContextRef.current = new AudioContext();
       }
       const ctx = audioContextRef.current;
-      const buffer = await ctx.decodeAudioData(chunk.buffer.slice(0) as ArrayBuffer);
+      const audioBuffer = await ctx.decodeAudioData(audioBytes);
       const source = ctx.createBufferSource();
-      source.buffer = buffer;
+      source.buffer = audioBuffer;
       source.connect(ctx.destination);
+
+      currentAudioSourceRef.current = source;
+
       source.onended = () => {
-        isPlayingRef.current = false;
-        if (audioQueueRef.current.length > 0) {
-          playNextChunk();
-        } else {
-          setOrbState('listening');
-        }
+        currentAudioSourceRef.current = null;
+        setOrbState('listening');
       };
+
       source.start();
-    } catch {
-      isPlayingRef.current = false;
-      if (audioQueueRef.current.length > 0) playNextChunk();
-    }
-  }, []);
-
-  // ── TTS callbacks ─────────────────────────────────────────────────
-  const handleTtsAudio = useCallback((_contextId: string, audioChunk: Uint8Array) => {
-    setOrbState('speaking');
-    audioQueueRef.current.push(audioChunk);
-    playNextChunk();
-  }, [playNextChunk]);
-
-  const handleTtsContextDone = useCallback((_contextId: string) => {
-    if (audioQueueRef.current.length === 0 && !isPlayingRef.current) {
+    } catch (err) {
+      console.warn('[AdminVoice] TTS playback failed:', err);
+      // TTS failed but session continues — go back to listening
       setOrbState('listening');
     }
   }, []);
@@ -105,25 +106,7 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
       setOrbState('listening');
       setIsSessionActive(true);
 
-      // Init TTS WebSocket
-      const adminToken = getAdminToken();
-      const suiteId = getSuiteId();
-
-      const tts = new TtsWebSocket({
-        voiceId: AVA_VOICE_ID,
-        accessToken: adminToken,
-        suiteId,
-        onAudio: handleTtsAudio,
-        onContextDone: handleTtsContextDone,
-        onConnected: () => {},
-        onError: (err) => setError(err.message),
-        onClose: () => {},
-      });
-
-      await tts.connect();
-      ttsRef.current = tts;
-
-      // Start STT
+      // Start STT — this is the critical path (mic access)
       await sttRef.current.startListening();
 
       emitReceipt?.({
@@ -144,15 +127,21 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
         summary: msg,
       });
     }
-  }, [handleTtsAudio, handleTtsContextDone, emitReceipt]);
+  }, [emitReceipt]);
 
   const endSession = useCallback(() => {
     sttRef.current.stopListening();
-    ttsRef.current?.close();
-    ttsRef.current = null;
-    audioQueueRef.current = [];
-    isPlayingRef.current = false;
-    currentContextRef.current = null;
+
+    // Stop any playing audio
+    if (currentAudioSourceRef.current) {
+      try { currentAudioSourceRef.current.stop(); } catch { /* already stopped */ }
+      currentAudioSourceRef.current = null;
+    }
+
+    // Abort any in-flight requests
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+
     setIsSessionActive(false);
     setOrbState('idle');
 
@@ -167,63 +156,101 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
     setIsMuted(prev => !prev);
   }, []);
 
-  // ── Process transcript → orchestrator → TTS ──────────────────────
+  // ── Process transcript → LLM (SSE) → TTS ─────────────────────────
   useEffect(() => {
-    if (!stt.transcript || !isSessionActive || !ttsRef.current) return;
+    if (!stt.transcript || !isSessionActive) return;
 
     const processTranscript = async () => {
       setOrbState('thinking');
 
-      try {
-        const adminToken = getAdminToken();
-        const suiteId = getSuiteId();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
-        const res = await fetch('/api/v1/intents', {
+      try {
+        // Stream response from backend LLM endpoint
+        const response = await fetch(buildOpsFacadeUrl('/admin/ops/chat'), {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'X-Admin-Token': adminToken,
-            'X-Suite-Id': suiteId,
+            ...buildOpsHeaders({ includeJson: true, includeAdminToken: true, includeSuiteId: false }),
+            Accept: 'text/event-stream',
           },
           body: JSON.stringify({
-            intent: stt.transcript,
-            channel: 'admin_voice',
+            message: stt.transcript,
+            context: { channel: 'admin_voice' },
           }),
+          signal: controller.signal,
         });
 
-        if (!res.ok) throw new Error(`Orchestrator error: ${res.status}`);
+        if (!response.ok) throw new Error(`Backend error: ${response.status}`);
 
-        const data = await res.json() as { response?: string; text?: string };
-        const responseText = data.response || data.text || "I'm ready for your next step.";
+        // Parse SSE stream to extract response text
+        let responseContent = '';
 
-        setLastAvaResponse(responseText);
+        if (response.body) {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
 
-        // Send to TTS
-        if (ttsRef.current && !isMuted) {
-          const ctxId = ttsRef.current.nextContextId();
-          currentContextRef.current = ctxId;
-          ttsRef.current.speak(responseText, ctxId);
-          ttsRef.current.flush(ctxId);
-        } else {
-          setOrbState('listening');
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (!line.startsWith('data:')) continue;
+              const raw = line.slice(5).trim();
+              if (!raw || raw === '[DONE]') continue;
+
+              try {
+                const event = JSON.parse(raw) as { type?: string; content?: string };
+                if ((event.type === 'response' || event.type === 'delta') && event.content) {
+                  responseContent += event.content;
+                }
+              } catch {
+                // Skip unparseable lines
+              }
+            }
+          }
         }
+
+        const finalText = responseContent || "I'm ready for your next step.";
+        setLastAvaResponse(finalText);
 
         // Clear transcript for next utterance
         sttRef.current.clearTranscript();
+
+        // Play response via TTS (HTTP streaming, not WebSocket)
+        if (!isMuted) {
+          await playTtsAudio(finalText);
+        } else {
+          setOrbState('listening');
+        }
       } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+
         setError(err instanceof Error ? err.message : 'Voice processing failed');
         setOrbState('error');
+        // Recover to listening after error display
+        setTimeout(() => {
+          if (isSessionActive) setOrbState('listening');
+        }, 3000);
       }
     };
 
     processTranscript();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- stt object is unstable, use individual values
-  }, [stt.transcript, isSessionActive, isMuted]);
+  }, [stt.transcript, isSessionActive, isMuted, playTtsAudio]);
 
   // ── Cleanup on unmount ────────────────────────────────────────────
   useEffect(() => {
     return () => {
-      ttsRef.current?.close();
+      abortControllerRef.current?.abort();
+      if (currentAudioSourceRef.current) {
+        try { currentAudioSourceRef.current.stop(); } catch { /* already stopped */ }
+      }
       audioContextRef.current?.close();
     };
   }, []);

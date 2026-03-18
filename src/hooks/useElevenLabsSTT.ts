@@ -1,7 +1,11 @@
 /**
- * Browser-compatible ElevenLabs Scribe STT hook.
+ * Browser-compatible STT hook.
  * Uses standard MediaRecorder API — no Expo dependencies.
- * Sends audio chunks to server proxy at /admin/ops/voice/stt.
+ * Sends raw audio bytes to server proxy at /admin/ops/voice/stt.
+ *
+ * Backend contract: POST /admin/ops/voice/stt
+ *   Request: raw audio bytes (Content-Type: audio/webm)
+ *   Response: { transcript: string, provider: string, correlation_id: string }
  */
 
 import { useState, useCallback, useRef } from 'react';
@@ -60,24 +64,27 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
         const blob = new Blob(chunksRef.current, { type: mimeType });
         chunksRef.current = [];
 
-        // Send to server proxy
+        // Send raw audio bytes to backend STT proxy
         try {
-          const formData = new FormData();
-          formData.append('audio', blob, 'recording.webm');
+          const audioBytes = await blob.arrayBuffer();
 
           const res = await fetch(buildOpsFacadeUrl('/admin/ops/voice/stt'), {
             method: 'POST',
-            headers: buildOpsHeaders({ includeJson: false }),
-            body: formData,
+            headers: {
+              ...buildOpsHeaders({ includeJson: false, includeAdminToken: true, includeSuiteId: false }),
+              'Content-Type': 'audio/webm',
+            },
+            body: audioBytes,
           });
 
           if (!res.ok) {
             throw new Error(`STT error: ${res.status}`);
           }
 
-          const data = await res.json() as { text: string };
-          if (data.text) {
-            setTranscript(prev => (prev ? prev + ' ' + data.text : data.text));
+          // Backend returns { transcript, provider, correlation_id }
+          const data = await res.json() as { transcript: string; provider: string };
+          if (data.transcript) {
+            setTranscript(prev => (prev ? prev + ' ' + data.transcript : data.transcript));
           }
         } catch (err) {
           setError(err instanceof Error ? err.message : 'STT failed');
