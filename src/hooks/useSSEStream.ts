@@ -15,6 +15,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 const MAX_BACKOFF_MS = 30_000;
 const INITIAL_BACKOFF_MS = 1_000;
+const MAX_RETRIES = 5;
+const CONNECT_TIMEOUT_MS = 10_000;
 
 type SSEConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -68,6 +70,7 @@ export function useSSEStream<T = unknown>({
   const mountedRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   const backoffRef = useRef(INITIAL_BACKOFF_MS);
+  const retryCountRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addEvent = useCallback(
@@ -93,6 +96,9 @@ export function useSSEStream<T = unknown>({
     setError(null);
 
     try {
+      // Connection timeout — abort if preflight/connect takes too long
+      const timeoutId = setTimeout(() => controller.abort(), CONNECT_TIMEOUT_MS);
+
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -103,6 +109,8 @@ export function useSSEStream<T = unknown>({
         signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
         throw new Error(`SSE connection failed: ${response.status} ${response.statusText}`);
       }
@@ -112,7 +120,8 @@ export function useSSEStream<T = unknown>({
       }
 
       setStatus('connected');
-      backoffRef.current = INITIAL_BACKOFF_MS; // Reset backoff on success
+      backoffRef.current = INITIAL_BACKOFF_MS;
+      retryCountRef.current = 0; // Reset retries on successful connection
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -167,19 +176,37 @@ export function useSSEStream<T = unknown>({
         }
       }
     } catch (err) {
-      if ((err as Error).name === 'AbortError') return; // Intentional disconnect
+      if ((err as Error).name === 'AbortError') {
+        // Could be intentional disconnect or connection timeout
+        if (mountedRef.current && retryCountRef.current < MAX_RETRIES) {
+          // Timeout-induced abort — retry with backoff
+          retryCountRef.current += 1;
+          const delay = backoffRef.current;
+          backoffRef.current = Math.min(delay * 2, MAX_BACKOFF_MS);
+          setStatus('error');
+          setError(`Connection timeout (attempt ${retryCountRef.current}/${MAX_RETRIES})`);
+          reconnectTimerRef.current = setTimeout(() => {
+            if (mountedRef.current) connect();
+          }, delay);
+        }
+        return;
+      }
 
       if (mountedRef.current) {
+        retryCountRef.current += 1;
         const msg = err instanceof Error ? err.message : 'SSE connection failed';
         setError(msg);
         setStatus('error');
 
-        // Auto-reconnect with exponential backoff
-        const delay = backoffRef.current;
-        backoffRef.current = Math.min(delay * 2, MAX_BACKOFF_MS);
-        reconnectTimerRef.current = setTimeout(() => {
-          if (mountedRef.current) connect();
-        }, delay);
+        if (retryCountRef.current < MAX_RETRIES) {
+          // Auto-reconnect with exponential backoff (capped retries)
+          const delay = backoffRef.current;
+          backoffRef.current = Math.min(delay * 2, MAX_BACKOFF_MS);
+          reconnectTimerRef.current = setTimeout(() => {
+            if (mountedRef.current) connect();
+          }, delay);
+        }
+        // After MAX_RETRIES, stop retrying — stay in error state
       }
     }
   }, [url, enabled, headers, eventTypes, addEvent]);
