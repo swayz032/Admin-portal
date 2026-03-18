@@ -873,9 +873,12 @@ export async function fetchCustomers(filters?: {
   const to = from + pageSize - 1;
 
   // Query suite_profiles (no status column — derive from onboarding_completed_at)
+  // Filter out e2e test accounts — they pollute the customer list
   const query = supabase
     .from('suite_profiles')
     .select('*', { count: 'exact' })
+    .not('email', 'like', '%e2e%')
+    .not('email', 'like', '%example.com%')
     .order('created_at', { ascending: false })
     .range(from, to);
 
@@ -915,19 +918,56 @@ function mapCustomerRow(row: Record<string, unknown>): Customer {
     name: (row.business_name as string) ?? (row.name as string) ?? 'Unknown',
     status: mapCustomerStatus(derivedStatus),
     plan: 'Aspire Suite',
-    mrr: 0, // Requires Stripe integration for real revenue data
+    mrr: 0,
     riskFlag: 'None',
     openIncidents: 0,
     openApprovals: 0,
     lastActivity: (row.updated_at as string) ?? (row.created_at as string) ?? '',
     integrations: [],
-    // Enterprise fields from actual suite_profiles columns
+    // Enterprise fields
     displayId: (row.display_id as string) ?? undefined,
     officeDisplayId: (row.office_display_id as string) ?? undefined,
     ownerName: (row.owner_name as string) ?? (row.name as string) ?? undefined,
     ownerEmail: (row.email as string) ?? undefined,
     industry: (row.industry as string) ?? null,
     teamSize,
+    // Demographics
+    gender: (row.gender as string) ?? undefined,
+    dateOfBirth: (row.date_of_birth as string) ?? undefined,
+    roleCategory: (row.role_category as string) ?? undefined,
+    entityType: (row.entity_type as string) ?? undefined,
+    yearsInBusiness: (row.years_in_business as string) ?? undefined,
+    customerType: (row.customer_type as string) ?? undefined,
+    salesChannel: (row.sales_channel as string) ?? undefined,
+    annualRevenueBand: (row.annual_revenue_band as string) ?? undefined,
+    incomeRange: (row.income_range as string) ?? undefined,
+    industrySpecialty: (row.industry_specialty as string) ?? undefined,
+    // Acquisition
+    referralSource: (row.referral_source as string) ?? undefined,
+    createdAt: (row.created_at as string) ?? undefined,
+    // Location
+    homeCity: (row.home_city as string) ?? undefined,
+    homeState: (row.home_state as string) ?? undefined,
+    homeCountry: (row.home_country as string) ?? undefined,
+    businessCity: (row.business_city as string) ?? undefined,
+    businessState: (row.business_state as string) ?? undefined,
+    businessCountry: (row.business_country as string) ?? undefined,
+    businessAddressSameAsHome: (row.business_address_same_as_home as boolean) ?? undefined,
+    // Needs & Goals
+    servicesNeeded: (row.services_needed as string[]) ?? undefined,
+    servicesPriority: (row.services_priority as string[]) ?? undefined,
+    currentTools: (row.current_tools as string[]) ?? undefined,
+    toolsPlanning: (row.tools_planning as string[]) ?? undefined,
+    businessGoals: (row.business_goals as string[]) ?? undefined,
+    painPoint: (row.pain_point as string) ?? undefined,
+    // Preferences
+    preferredChannel: (row.preferred_channel as string) ?? undefined,
+    timezone: (row.timezone as string) ?? undefined,
+    currency: (row.currency as string) ?? undefined,
+    // Onboarding
+    onboardingCompletedAt: (row.onboarding_completed_at as string) ?? undefined,
+    consentPersonalization: (row.consent_personalization as boolean) ?? undefined,
+    consentCommunications: (row.consent_communications as boolean) ?? undefined,
   };
 }
 
@@ -1890,10 +1930,14 @@ export async function listReceipts(filters?: ReceiptFilters): Promise<PaginatedR
     .order('created_at', { ascending: false })
     .limit(pageSize);
 
-  if (filters?.status) query = query.eq('status', filters.status);
-  if (filters?.provider) query = query.eq('provider', filters.provider);
-  if (filters?.domain) query = query.eq('domain', filters.domain);
-  if (filters?.action_type) query = query.eq('action_type', filters.action_type);
+  // Map UI filter names to actual DB column names
+  if (filters?.status) {
+    // UI uses lowercase, DB uses uppercase
+    const dbStatus = filters.status === 'success' ? 'SUCCEEDED' : filters.status.toUpperCase();
+    query = query.eq('status', dbStatus);
+  }
+  if (filters?.domain) query = query.eq('receipt_type', filters.domain);
+  if (filters?.action_type) query = query.contains('action', { action_type: filters.action_type });
   if (filters?.correlation_id) query = query.eq('correlation_id', filters.correlation_id);
   if (filters?.suite_id) query = query.eq('suite_id', filters.suite_id);
   if (filters?.from_date) query = query.gte('created_at', filters.from_date);
@@ -1903,10 +1947,52 @@ export async function listReceipts(filters?: ReceiptFilters): Promise<PaginatedR
   if (error) throw new ApiError(`Failed to fetch receipts: ${error.message}`, error.code);
 
   return {
-    data: (data ?? []) as unknown as TrustReceipt[],
+    data: (data ?? []).map(mapTrustReceiptRow),
     count: count ?? 0,
     page,
     pageSize,
+  };
+}
+
+/** Map raw Supabase receipts row to TrustReceipt (contracts) UI type */
+function mapTrustReceiptRow(row: Record<string, unknown>): TrustReceipt {
+  const action = (row.action ?? {}) as Record<string, unknown>;
+  const rawStatus = (row.status as string) ?? 'PENDING';
+
+  // Map DB uppercase status to UI lowercase ReceiptStatus
+  let status: string;
+  switch (rawStatus.toUpperCase()) {
+    case 'SUCCEEDED': status = 'success'; break;
+    case 'FAILED': status = 'failed'; break;
+    case 'DENIED': status = 'denied'; break;
+    case 'BLOCKED': status = 'blocked'; break;
+    default: status = 'pending';
+  }
+
+  // Extract action_type from JSONB action column
+  const actionType = (action.action_type as string)
+    ?? (action.tool_used as string)
+    ?? (row.receipt_type as string)
+    ?? 'unknown';
+
+  // Derive provider from action metadata or receipt_type
+  const provider = (action.provider as string)
+    ?? (action.tool_used as string)
+    ?? undefined;
+
+  return {
+    id: (row.receipt_id as string) ?? (row.id as string) ?? '',
+    suite_id: (row.suite_id as string) ?? '',
+    office_id: (row.office_id as string) ?? '',
+    domain: (row.receipt_type as string) ?? '',
+    action_type: actionType,
+    status: status as TrustReceipt['status'],
+    created_at: (row.created_at as string) ?? '',
+    correlation_id: (row.correlation_id as string) || '',
+    payload: action,
+    provider,
+    receipt_type: (row.receipt_type as string) ?? undefined,
+    request_id: (row.request_id as string) ?? undefined,
   };
 }
 
@@ -1946,10 +2032,78 @@ export async function listOutboxJobs(filters?: OutboxFilters): Promise<Paginated
   if (error) throw new ApiError(`Failed to fetch outbox jobs: ${error.message}`, error.code);
 
   return {
-    data: (data ?? []) as unknown as OutboxJob[],
+    data: (data ?? []).map(mapOutboxJobRow),
     count: count ?? 0,
     page: 1,
     pageSize: 100,
+  };
+}
+
+/** Map raw Supabase outbox_jobs row to OutboxJob UI type */
+function mapOutboxJobRow(row: Record<string, unknown>): OutboxJob {
+  return {
+    id: (row.id as string) ?? '',
+    suite_id: (row.suite_id as string) ?? (row.tenant_id as string) ?? '',
+    office_id: (row.office_id as string) ?? '',
+    status: ((row.status as string) ?? 'queued') as OutboxJob['status'],
+    queued_at: (row.created_at as string) ?? (row.queued_at as string) ?? '',
+    started_at: (row.locked_at as string) ?? (row.started_at as string) ?? undefined,
+    finished_at: (row.finished_at as string) ?? undefined,
+    attempts: (row.attempt_count as number) ?? (row.attempts as number) ?? 0,
+    correlation_id: (row.trace_id as string) ?? (row.correlation_id as string) ?? (row.run_id as string) ?? '',
+    action_type: (row.action_type as string) ?? 'unknown',
+    provider: (row.provider as string) ?? undefined,
+    error_message: (row.last_error as string) ?? (row.error_message as string) ?? undefined,
+  };
+}
+
+/** Map raw Supabase provider_call_log row to ProviderCallLog UI type */
+function mapProviderCallRow(row: Record<string, unknown>): ProviderCallLog {
+  const startedAt = row.started_at as string | null;
+  const completedAt = (row.completed_at as string) ?? (row.finished_at as string) ?? null;
+
+  // Calculate duration from timestamps if not directly available
+  let durationMs: number | undefined;
+  if (startedAt && completedAt) {
+    durationMs = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+    if (durationMs < 0) durationMs = undefined;
+  }
+
+  // Map DB status (may be uppercase)
+  const rawStatus = ((row.status as string) ?? 'success').toLowerCase();
+  let status: string;
+  switch (rawStatus) {
+    case 'succeeded': case 'success': case 'ok': status = 'success'; break;
+    case 'failed': case 'error': status = 'failed'; break;
+    case 'timeout': case 'timed_out': status = 'timeout'; break;
+    case 'rate_limited': case 'throttled': status = 'rate_limited'; break;
+    default: status = rawStatus;
+  }
+
+  // Parse redacted JSON fields
+  let requestMeta: Record<string, unknown> = {};
+  let responseMeta: Record<string, unknown> = {};
+  try {
+    const reqRaw = row.request_redacted ?? row.request_meta;
+    requestMeta = typeof reqRaw === 'string' ? JSON.parse(reqRaw) : (reqRaw as Record<string, unknown>) ?? {};
+  } catch { /* ignore parse errors */ }
+  try {
+    const resRaw = row.response_redacted ?? row.response_meta;
+    responseMeta = typeof resRaw === 'string' ? JSON.parse(resRaw) : (resRaw as Record<string, unknown>) ?? {};
+  } catch { /* ignore parse errors */ }
+
+  return {
+    id: (row.call_id as string) ?? (row.id as string) ?? '',
+    suite_id: (row.suite_id as string) ?? (row.tenant_id as string) ?? '',
+    provider: (row.external_provider as string) ?? (row.provider as string) ?? 'unknown',
+    action_type: (row.operation as string) ?? (row.action_type as string) ?? 'unknown',
+    status: status as ProviderCallLog['status'],
+    started_at: startedAt ?? '',
+    finished_at: completedAt ?? '',
+    correlation_id: (row.trace_id as string) ?? (row.correlation_id as string) ?? (row.run_id as string) ?? '',
+    request_meta: requestMeta,
+    response_meta: responseMeta,
+    duration_ms: (row.duration_ms as number) ?? durationMs,
   };
 }
 
@@ -1960,15 +2114,15 @@ export async function listProviderCallLogs(filters?: ProviderCallLogFilters): Pr
     .order('started_at', { ascending: false })
     .limit(500);
 
-  if (filters?.provider) query = query.eq('provider', filters.provider);
+  if (filters?.provider) query = query.eq('external_provider', filters.provider);
   if (filters?.status) query = query.eq('status', filters.status);
-  if (filters?.correlation_id) query = query.eq('correlation_id', filters.correlation_id);
+  if (filters?.correlation_id) query = query.eq('trace_id', filters.correlation_id);
 
   const { data, error, count } = await query;
   if (error) throw new ApiError(`Failed to fetch provider call logs: ${error.message}`, error.code);
 
   return {
-    data: (data ?? []) as unknown as ProviderCallLog[],
+    data: (data ?? []).map(mapProviderCallRow),
     count: count ?? 0,
     page: 1,
     pageSize: 100,
