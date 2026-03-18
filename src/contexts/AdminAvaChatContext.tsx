@@ -45,6 +45,8 @@ export interface ChatMessage {
     patchTestPlan?: string;
     /** Release pipeline gates (status: pending|running|passed|failed|awaiting_approval) */
     pipelineGates?: Array<{ id: string; name: string; environment: string; status: 'pending' | 'running' | 'passed' | 'failed' | 'awaiting_approval'; robotRunId?: string; requiresApproval: boolean }>;
+    /** Internal: true while response is actively streaming */
+    _isStreaming?: boolean;
   };
 }
 
@@ -182,6 +184,7 @@ export function AdminAvaChatProvider({ children }: { children: ReactNode }) {
       let buffer = '';
       let responseContent = '';
       let responseMeta: ChatMessage['meta'] = {};
+      let hasStartedContent = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -232,7 +235,31 @@ export function AdminAvaChatProvider({ children }: { children: ReactNode }) {
             }
 
             if (event.type === 'response' || event.type === 'delta') {
-              responseContent += event.content || '';
+              const newContent = event.content || '';
+              if (newContent) {
+                responseContent += newContent;
+
+                // Transition from thinking → streaming on first content token
+                if (!hasStartedContent) {
+                  hasStartedContent = true;
+                  setMessages(prev =>
+                    prev.map(m =>
+                      m.id === thinkingId
+                        ? { ...m, type: 'text' as const, content: responseContent, meta: { ...m.meta, _isStreaming: true } }
+                        : m,
+                    ),
+                  );
+                } else {
+                  // Update content in real-time as tokens arrive
+                  setMessages(prev =>
+                    prev.map(m =>
+                      m.id === thinkingId
+                        ? { ...m, content: responseContent, meta: { ...m.meta, _isStreaming: true } }
+                        : m,
+                    ),
+                  );
+                }
+              }
             }
 
             if (event.reasoning) {
@@ -281,7 +308,7 @@ export function AdminAvaChatProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // 4. Replace thinking message with final response
+      // 4. Finalize — remove streaming flag, set final type + meta
       const avaMsg: ChatMessage = {
         id: thinkingId,
         role: 'ava',
@@ -291,7 +318,7 @@ export function AdminAvaChatProvider({ children }: { children: ReactNode }) {
             : 'text',
         content: responseContent || "I'm ready for your next step.",
         timestamp: now(),
-        meta: responseMeta,
+        meta: { ...responseMeta },
       };
       setMessages(prev => prev.map(m => (m.id === thinkingId ? avaMsg : m)));
 

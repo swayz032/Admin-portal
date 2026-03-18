@@ -127,6 +127,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
   }
 
   // ── Ava response (main) ───────────────────────────────────────────
+  const isCurrentlyStreaming = !!message.meta?._isStreaming;
+
   return (
     <div className="flex items-start gap-2.5 animate-slide-up">
       <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
@@ -136,9 +138,17 @@ export function ChatMessage({ message }: ChatMessageProps) {
         {/* Header */}
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-medium text-text-tertiary">Ava</span>
-          <span className="text-[10px] text-text-tertiary/50">
-            {formatTimeAgo(message.timestamp)}
-          </span>
+          {isCurrentlyStreaming && (
+            <span className="text-[10px] text-primary flex items-center gap-1">
+              <span className="w-1 h-1 rounded-full bg-primary animate-pulse" />
+              streaming
+            </span>
+          )}
+          {!isCurrentlyStreaming && (
+            <span className="text-[10px] text-text-tertiary/50">
+              {formatTimeAgo(message.timestamp)}
+            </span>
+          )}
         </div>
 
         {/* Reasoning (collapsible chain of thought) */}
@@ -155,8 +165,11 @@ export function ChatMessage({ message }: ChatMessageProps) {
         )}
 
         {/* Main content — rich markdown */}
-        <div className="rounded-2xl rounded-bl-md bg-card border border-border/50 px-4 py-3">
-          <MarkdownRenderer content={message.content} />
+        <div className={cn(
+          'rounded-2xl rounded-bl-md bg-card border border-border/50 px-4 py-3',
+          isCurrentlyStreaming && 'border-primary/20',
+        )}>
+          <MarkdownRenderer content={message.content} isStreaming={isCurrentlyStreaming} />
         </div>
 
         {/* Sources chips */}
