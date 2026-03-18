@@ -9,7 +9,6 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Mic, Square, RotateCcw, MessageCircle, X } from 'lucide-react';
 import { PersonaOrb } from './PersonaOrb';
 import { useAdminVoice } from '@/hooks/useAdminVoice';
-import { useAdminAvaChat } from '@/contexts/AdminAvaChatContext';
 
 interface VoiceModalProps {
   open: boolean;
@@ -26,7 +25,6 @@ function statusLabel(status: string): string {
 
 export function VoiceModal({ open, onClose }: VoiceModalProps) {
   const voice = useAdminVoice();
-  const chat = useAdminAvaChat();
 
   const isActive =
     voice.orbState === 'listening' ||
@@ -34,12 +32,6 @@ export function VoiceModal({ open, onClose }: VoiceModalProps) {
     voice.orbState === 'thinking';
 
   const handleClose = () => {
-    if (voice.transcript) {
-      chat.addSystemMessage(`Voice transcript: "${voice.transcript}"`);
-    }
-    if (voice.lastAvaResponse) {
-      chat.addSystemMessage(`Ava (voice): ${voice.lastAvaResponse}`);
-    }
     voice.endSession();
     onClose();
   };
