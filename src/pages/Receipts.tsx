@@ -71,10 +71,10 @@ export default function Receipts() {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       return (
-        r.id.toLowerCase().includes(term) ||
-        r.correlation_id.toLowerCase().includes(term) ||
-        r.action_type.toLowerCase().includes(term) ||
-        r.domain.toLowerCase().includes(term)
+        r.id?.toLowerCase().includes(term) ||
+        r.correlation_id?.toLowerCase().includes(term) ||
+        r.action_type?.toLowerCase().includes(term) ||
+        r.domain?.toLowerCase().includes(term)
       );
     }
     return true;

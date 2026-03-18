@@ -19,6 +19,10 @@ import { formatDate, formatTimeAgo } from '@/lib/formatters';
 import { useSystem } from '@/contexts/SystemContext';
 import { Search, Filter, FileCheck, AlertTriangle, Link as LinkIcon, Activity, ChevronDown, CheckCircle, Zap } from 'lucide-react';
 import { ModeText } from '@/components/shared/ModeText';
+import { derivePremiumActionLabel } from '@/services/apiClient';
+import { formatReceiptId, formatCorrelationId } from '@/lib/premiumIds';
+import { CopyableId } from '@/components/shared/CopyableId';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 
 export default function ActivityPage() {
   const { systemState, viewMode } = useSystem();
@@ -28,6 +32,7 @@ export default function ActivityPage() {
   const [providerFilter, setProviderFilter] = useState<string>('all');
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const { copiedId, copyToClipboard } = useCopyToClipboard();
 
   if (receiptsLoading) return <PageLoadingState showKPIs rows={8} />;
   if (receiptsError) return <EmptyState variant="error" title="Failed to load activity" description={receiptsError} actionLabel="Retry" onAction={refetchReceipts} />;
@@ -67,7 +72,7 @@ export default function ActivityPage() {
 
   // Operator-friendly columns
   const operatorColumns = [
-    { key: 'actionType', header: 'What happened' },
+    { key: 'actionType', header: 'What happened', render: (r: Receipt) => <span className="text-sm">{derivePremiumActionLabel(r.actionType, 'operator')}</span> },
     { key: 'actor', header: 'Who' },
     { 
       key: 'outcome', 
@@ -91,10 +96,10 @@ export default function ActivityPage() {
 
   // Engineer columns
   const engineerColumns = [
-    { key: 'id', header: 'Receipt ID', render: (r: Receipt) => <span className="font-mono text-xs">{r.id}</span> },
+    { key: 'id', header: 'Receipt ID', render: (r: Receipt) => <CopyableId fullId={r.id} displayId={formatReceiptId(r.id)} isCopied={copiedId === r.id} onCopy={copyToClipboard} /> },
     { key: 'timestamp', header: 'Timestamp', render: (r: Receipt) => <span className="text-muted-foreground">{formatDate(r.timestamp)}</span> },
     { key: 'actor', header: 'Actor' },
-    { key: 'actionType', header: 'Action Type' },
+    { key: 'actionType', header: 'Action Type', render: (r: Receipt) => <span className="text-sm" title={r.actionType}>{derivePremiumActionLabel(r.actionType, 'engineer')}</span> },
     { 
       key: 'outcome', 
       header: 'Outcome', 
@@ -254,7 +259,9 @@ export default function ActivityPage() {
                 </div>
                 <div>
                   <Label className="text-muted-foreground text-xs">What happened</Label>
-                  <p className="text-sm">{selectedReceipt.actionType}</p>
+                  <p className="text-sm" title={viewMode === 'engineer' ? selectedReceipt.actionType : undefined}>
+                    {derivePremiumActionLabel(selectedReceipt.actionType, viewMode as 'operator' | 'engineer')}
+                  </p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground text-xs">Result</Label>
@@ -273,7 +280,7 @@ export default function ActivityPage() {
                     <Label className="text-muted-foreground text-xs mb-2 block">Correlation IDs</Label>
                     <div className="flex flex-wrap gap-2">
                       <code className="px-2 py-1 rounded bg-muted text-xs">{selectedReceipt.runId}</code>
-                      <code className="px-2 py-1 rounded bg-muted text-xs">{selectedReceipt.correlationId}</code>
+                      <CopyableId fullId={selectedReceipt.correlationId} displayId={formatCorrelationId(selectedReceipt.correlationId)} isCopied={copiedId === selectedReceipt.correlationId} onCopy={copyToClipboard} linkTo={`/trace/${selectedReceipt.correlationId}`} />
                     </div>
                   </div>
 

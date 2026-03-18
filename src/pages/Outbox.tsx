@@ -19,6 +19,10 @@ import { OutboxJob, OutboxJobStatus } from '@/contracts';
 import { listOutboxJobs } from '@/services/apiClient';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { formatTimeAgo } from '@/lib/formatters';
+import { derivePremiumActionLabel } from '@/services/apiClient';
+import { formatCorrelationId } from '@/lib/premiumIds';
+import { CopyableId } from '@/components/shared/CopyableId';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import {
   Inbox,
   RefreshCw,
@@ -38,6 +42,7 @@ export default function Outbox() {
   });
   const [selectedJob, setSelectedJob] = useState<OutboxJob | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const { copiedId, copyToClipboard } = useCopyToClipboard();
 
   const filteredJobs = jobs.filter(j => {
     if (statusFilter !== 'all' && j.status !== statusFilter) return false;
@@ -80,7 +85,7 @@ export default function Outbox() {
         </div>
       ) 
     },
-    { key: 'action_type', header: 'Task' },
+    { key: 'action_type', header: 'Task', render: (j: OutboxJob) => <span className="text-sm">{derivePremiumActionLabel(j.action_type, 'operator')}</span> },
     { key: 'provider', header: 'Service', render: (j: OutboxJob) => j.provider || 'Internal' },
     { 
       key: 'queued_at', 
@@ -97,10 +102,10 @@ export default function Outbox() {
       )
     },
   ] : [
-    { 
-      key: 'id', 
-      header: 'Job ID', 
-      render: (j: OutboxJob) => <span className="font-mono text-xs text-muted-foreground">{j.id}</span>
+    {
+      key: 'id',
+      header: 'Job ID',
+      render: (j: OutboxJob) => <CopyableId fullId={j.id} displayId={`JOB-${j.id?.substring(0, 8).toUpperCase() ?? '????'}`} isCopied={copiedId === j.id} onCopy={copyToClipboard} />
     },
     { 
       key: 'status', 
@@ -112,14 +117,14 @@ export default function Outbox() {
         </div>
       ) 
     },
-    { key: 'action_type', header: 'Action Type' },
+    { key: 'action_type', header: 'Action Type', render: (j: OutboxJob) => <span className="text-sm" title={j.action_type}>{derivePremiumActionLabel(j.action_type, 'engineer')}</span> },
     { key: 'provider', header: 'Provider' },
-    { 
-      key: 'correlation_id', 
-      header: 'Correlation ID', 
-      render: (j: OutboxJob) => (
-        <span className="font-mono text-xs text-primary">{j.correlation_id.slice(0, 16)}...</span>
-      )
+    {
+      key: 'correlation_id',
+      header: 'Trace',
+      render: (j: OutboxJob) => j.correlation_id
+        ? <CopyableId fullId={j.correlation_id} displayId={formatCorrelationId(j.correlation_id)} isCopied={copiedId === j.correlation_id} onCopy={copyToClipboard} linkTo={`/trace/${j.correlation_id}`} />
+        : <span className="text-muted-foreground text-xs">-</span>
     },
     { key: 'attempts', header: 'Attempts' },
     { 
@@ -249,7 +254,9 @@ export default function Outbox() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Action</span>
-                    <span className="text-sm">{selectedJob.action_type}</span>
+                    <span className="text-sm" title={viewMode === 'engineer' ? selectedJob.action_type : undefined}>
+                      {derivePremiumActionLabel(selectedJob.action_type, viewMode as 'operator' | 'engineer')}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">
@@ -308,8 +315,11 @@ export default function Outbox() {
                       <code className="text-xs bg-surface-2 px-2 py-1 rounded">{selectedJob.office_id}</code>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Correlation ID</span>
-                      <code className="text-xs bg-surface-2 px-2 py-1 rounded text-primary">{selectedJob.correlation_id}</code>
+                      <span className="text-sm text-muted-foreground">Trace</span>
+                      {selectedJob.correlation_id
+                        ? <CopyableId fullId={selectedJob.correlation_id} displayId={formatCorrelationId(selectedJob.correlation_id)} isCopied={copiedId === selectedJob.correlation_id} onCopy={copyToClipboard} linkTo={`/trace/${selectedJob.correlation_id}`} />
+                        : <span className="text-xs text-muted-foreground">-</span>
+                      }
                     </div>
                   </div>
                 )}

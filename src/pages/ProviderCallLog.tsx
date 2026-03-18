@@ -82,9 +82,9 @@ export default function ProviderCallLogPage() {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       return (
-        l.id.toLowerCase().includes(term) ||
-        l.correlation_id.toLowerCase().includes(term) ||
-        l.action_type.toLowerCase().includes(term)
+        l.id?.toLowerCase().includes(term) ||
+        l.correlation_id?.toLowerCase().includes(term) ||
+        l.action_type?.toLowerCase().includes(term)
       );
     }
     return true;

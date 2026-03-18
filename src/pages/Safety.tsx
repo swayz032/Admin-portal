@@ -14,6 +14,7 @@ import { formatTimeAgo } from '@/lib/formatters';
 import { Shield, AlertTriangle, Power, Activity, CheckCircle, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ModeText } from '@/components/shared/ModeText';
+import { derivePremiumActionLabel } from '@/services/apiClient';
 
 const autonomyDescriptions = {
   'Limited': 'Most actions require manual approval. Automations are paused or run in read-only mode.',
@@ -198,7 +199,7 @@ export default function Safety() {
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{action.actionType}</span>
+                    <span className="text-sm font-medium">{derivePremiumActionLabel(action.actionType, 'operator')}</span>
                     <span className="text-xs text-muted-foreground">{formatTimeAgo(action.timestamp)}</span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
