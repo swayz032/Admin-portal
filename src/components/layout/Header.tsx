@@ -1,4 +1,4 @@
-import { Menu, Bell, User, Bot, LogOut } from 'lucide-react';
+import { Menu, Bell, User, LogOut } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -27,7 +27,7 @@ export function Header({ onMenuClick }: HeaderProps) {
     await signOut();
   };
 
-  const displayName = user?.displayName || 'User';
+  const displayName = user?.displayName || 'Tonio Scott';
 
   return (
     <header className="h-14 border-b border-border bg-background/95 backdrop-blur-sm flex items-center justify-between px-4 sticky top-0 z-40">
@@ -63,7 +63,7 @@ export function Header({ onMenuClick }: HeaderProps) {
           <TooltipTrigger asChild>
             <Button variant="ghost" size="icon" className="h-9 w-9" asChild>
               <Link to="/llm-ops-desk">
-                <Bot className="h-4 w-4 text-primary" />
+                <img src="/ava-avatar.png" alt="Ava" className="h-5 w-5 rounded-full object-cover border border-primary/20" />
               </Link>
             </Button>
           </TooltipTrigger>

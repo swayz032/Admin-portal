@@ -3,11 +3,12 @@
  *
  * User: clean bubble. Ava: markdown + chain of thought + shimmer + sources.
  * Council, robot results, patch diffs render inline.
+ * Ava uses her real avatar image, not a generic Bot icon.
  */
 
 import { cn } from '@/lib/utils';
 import { formatTimeAgo } from '@/lib/formatters';
-import { Bot, User, AlertTriangle, FileCode, Sparkles } from 'lucide-react';
+import { User, AlertTriangle, FileCode, Sparkles } from 'lucide-react';
 import type { ChatMessage as ChatMessageType } from '@/contexts/AdminAvaChatContext';
 import { useAdminAvaChat } from '@/contexts/AdminAvaChatContext';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -22,6 +23,20 @@ import { IncidentAggregator } from './IncidentAggregator';
 
 interface ChatMessageProps {
   message: ChatMessageType;
+}
+
+/** Ava's real avatar — used for all Ava message types */
+function AvaAvatar({ className }: { className?: string }) {
+  return (
+    <div className={cn('flex-shrink-0 w-7 h-7 rounded-full overflow-hidden border border-white/10', className)}>
+      <img
+        src="/ava-avatar.png"
+        alt="Ava"
+        className="w-full h-full object-cover"
+        loading="lazy"
+      />
+    </div>
+  );
 }
 
 /** Convert tool calls from SSE into ChainOfThought steps */
@@ -85,9 +100,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
     return (
       <div className="flex items-start gap-2.5 animate-slide-up">
-        <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-          <Bot className="w-3.5 h-3.5 text-primary" />
-        </div>
+        <AvaAvatar />
         <div className="flex-1 max-w-[85%] space-y-2">
           <div className="text-[10px] font-medium text-text-tertiary">Ava</div>
 
@@ -131,9 +144,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
   return (
     <div className="flex items-start gap-2.5 animate-slide-up">
-      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-        <Bot className="w-3.5 h-3.5 text-primary" />
-      </div>
+      <AvaAvatar />
       <div className="flex-1 max-w-[85%] space-y-2">
         {/* Header */}
         <div className="flex items-center gap-2">

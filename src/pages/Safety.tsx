@@ -30,13 +30,14 @@ export default function Safety() {
   if (receiptsLoading) return <PageLoadingState showKPIs rows={5} />;
   if (receiptsError) return <EmptyState variant="error" title="Failed to load safety data" description={receiptsError} actionLabel="Retry" onAction={refetchReceipts} />;
 
-  const recentSafetyActions = receipts.filter(r =>
-    r.outcome === 'Blocked' || 
+  const safeReceipts = receipts ?? [];
+  const recentSafetyActions = safeReceipts.filter(r =>
+    r.outcome === 'Blocked' ||
     r.actionType.toLowerCase().includes('safety') ||
     r.actionType.toLowerCase().includes('disconnect')
   ).slice(0, 5);
 
-  const blockedCount = receipts.filter(r => r.outcome === 'Blocked').length;
+  const blockedCount = safeReceipts.filter(r => r.outcome === 'Blocked').length;
 
   const handleToggleSafetyMode = () => {
     toggleSafetyMode();

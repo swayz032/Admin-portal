@@ -1,6 +1,5 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -9,11 +8,12 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, session, sessionInfo, loading, mfaRequired } = useAuth();
 
-  // 1. Loading → spinner
+  // 1. Loading → branded loading screen (no spinner flash)
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+        <img src="/ava-avatar.png" alt="Aspire" className="w-12 h-12 rounded-full animate-pulse" />
+        <p className="text-sm text-muted-foreground animate-pulse">Loading Aspire...</p>
       </div>
     );
   }

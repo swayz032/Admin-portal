@@ -110,6 +110,12 @@ export default function AudienceIntelligence() {
   if (error) return <EmptyState variant="error" title="Failed to load audience data" description={error} actionLabel="Retry" onAction={refetch} />;
   if (!data || data.totalProfiles === 0) return <EmptyState variant="no-data" title="No audience data yet" description="Audience intelligence will appear once customer profiles are created." />;
 
+  // Null-safe nested data access — API may return partial responses
+  const demographics = data.demographics ?? { entityTypes: [], customerTypes: [], genders: [], revenueBands: [] };
+  const acquisition = data.acquisition ?? { referralSources: [], salesChannels: [], signupsByMonth: [] };
+  const needs = data.needs ?? { topServices: [], topGoals: [], topPainPoints: [], preferredChannels: [] };
+  const geography = data.geography ?? { countries: [], states: [], cities: [] };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* KPI Row */}
@@ -162,18 +168,18 @@ export default function AudienceIntelligence() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <PieChartPanel
               title={viewMode === 'operator' ? 'Business Types' : 'Entity Types'}
-              data={data.demographics.entityTypes}
+              data={demographics.entityTypes}
             />
             <PieChartPanel
               title={viewMode === 'operator' ? 'Customer Segments' : 'Customer Types'}
-              data={data.demographics.customerTypes}
+              data={demographics.customerTypes}
             />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <PieChartPanel title="Gender Distribution" data={data.demographics.genders} />
+            <PieChartPanel title="Gender Distribution" data={demographics.genders} />
             <BarChartPanel
               title={viewMode === 'operator' ? 'Revenue Brackets' : 'Annual Revenue Bands'}
-              data={data.demographics.revenueBands}
+              data={demographics.revenueBands}
             />
           </div>
         </TabsContent>
@@ -183,18 +189,18 @@ export default function AudienceIntelligence() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <BarChartPanel
               title={viewMode === 'operator' ? 'Where They Come From' : 'Referral Sources'}
-              data={data.acquisition.referralSources}
+              data={acquisition.referralSources}
             />
             <PieChartPanel
               title={viewMode === 'operator' ? 'Sales Channels' : 'Channel Distribution'}
-              data={data.acquisition.salesChannels}
+              data={acquisition.salesChannels}
             />
           </div>
           <Panel title={viewMode === 'operator' ? 'Signups Over Time' : 'Monthly Registration Trend'}>
-            {data.acquisition.signupsByMonth.length > 0 ? (
+            {acquisition.signupsByMonth.length > 0 ? (
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.acquisition.signupsByMonth} margin={{ left: 16, right: 16, top: 8, bottom: 8 }}>
+                  <BarChart data={acquisition.signupsByMonth} margin={{ left: 16, right: 16, top: 8, bottom: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 20%)" />
                     <XAxis dataKey="date" tick={{ fill: 'hsl(0, 0%, 60%)', fontSize: 12 }} />
                     <YAxis tick={{ fill: 'hsl(0, 0%, 60%)', fontSize: 12 }} />
@@ -217,21 +223,21 @@ export default function AudienceIntelligence() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <BarChartPanel
               title={viewMode === 'operator' ? 'Most Requested Services' : 'Top Services Needed'}
-              data={data.needs.topServices}
+              data={needs.topServices}
             />
             <BarChartPanel
               title={viewMode === 'operator' ? 'What They Want to Achieve' : 'Top Business Goals'}
-              data={data.needs.topGoals}
+              data={needs.topGoals}
             />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <BarChartPanel
               title={viewMode === 'operator' ? 'Biggest Pain Points' : 'Top Pain Points'}
-              data={data.needs.topPainPoints}
+              data={needs.topPainPoints}
             />
             <PieChartPanel
               title={viewMode === 'operator' ? 'How They Want to Communicate' : 'Preferred Channels'}
-              data={data.needs.preferredChannels}
+              data={needs.preferredChannels}
             />
           </div>
         </TabsContent>
@@ -241,16 +247,16 @@ export default function AudienceIntelligence() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <BarChartPanel
               title={viewMode === 'operator' ? 'Countries' : 'Business Countries'}
-              data={data.geography.countries}
+              data={geography.countries}
             />
             <BarChartPanel
               title={viewMode === 'operator' ? 'States / Regions' : 'Business States'}
-              data={data.geography.states}
+              data={geography.states}
             />
           </div>
           <BarChartPanel
             title={viewMode === 'operator' ? 'Top Cities' : 'Business Cities'}
-            data={data.geography.cities}
+            data={geography.cities}
           />
         </TabsContent>
       </Tabs>

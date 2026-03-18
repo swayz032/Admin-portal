@@ -21,6 +21,7 @@ import { useRealtimeApprovals } from '@/hooks/useRealtimeApprovals';
 import { useRealtimeReceipts } from '@/hooks/useRealtimeReceipts';
 import { submitApprovalDecision } from '@/services/opsFacadeClient';
 import { devError } from '@/lib/devLog';
+import { toast } from 'sonner';
 import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatDate, formatTimeAgo } from '@/lib/formatters';
@@ -104,6 +105,9 @@ export default function Approvals() {
     } catch (err) {
       // Fail closed (Law #3): backend error = decision NOT persisted, show error
       devError('Approval decision failed:', err);
+      toast.error('Decision failed', {
+        description: 'The approval decision could not be saved. Please try again.',
+      });
       // Refetch to get authoritative state
       refetchApprovals();
     } finally {
@@ -113,8 +117,8 @@ export default function Approvals() {
     }
   };
 
-  const relatedReceipts = selectedApproval 
-    ? localReceipts.filter(r => selectedApproval.evidenceReceiptIds.includes(r.id) || r.linkedApprovalId === selectedApproval.id)
+  const relatedReceipts = selectedApproval
+    ? localReceipts.filter(r => (selectedApproval.evidenceReceiptIds ?? []).includes(r.id) || r.linkedApprovalId === selectedApproval.id)
     : [];
 
   const isSafetyModeOn = systemState.safetyMode;

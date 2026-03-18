@@ -33,11 +33,12 @@ export default function ActivityPage() {
   if (receiptsError) return <EmptyState variant="error" title="Failed to load activity" description={receiptsError} actionLabel="Retry" onAction={refetchReceipts} />;
 
   const filteredReceipts = receipts.filter(r => {
-    const matchesSearch = searchTerm === '' || 
-      r.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.correlationId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.actor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.actionType.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = searchTerm === '' ||
+      (r.id ?? '').toLowerCase().includes(term) ||
+      (r.correlationId ?? '').toLowerCase().includes(term) ||
+      (r.actor ?? '').toLowerCase().includes(term) ||
+      (r.actionType ?? '').toLowerCase().includes(term);
     const matchesOutcome = outcomeFilter === 'all' || r.outcome === outcomeFilter;
     const matchesProvider = providerFilter === 'all' || r.provider === providerFilter;
     return matchesSearch && matchesOutcome && matchesProvider;
@@ -128,7 +129,7 @@ export default function ActivityPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <InsightPanel
           headline={`${successCount} successful actions`}
-          subtext={`${Math.round((successCount / receipts.length) * 100)}% success rate`}
+          subtext={`${receipts.length > 0 ? Math.round((successCount / receipts.length) * 100) : 0}% success rate`}
           trend="positive"
           icon={<CheckCircle className="h-5 w-5" />}
         />
@@ -141,8 +142,16 @@ export default function ActivityPage() {
           linkLabel="View safety settings"
         />
         <InsightPanel
-          headline="Most active: Stripe"
-          subtext={`${receipts.filter(r => r.provider === 'Stripe').length} actions this week`}
+          headline={(() => {
+            const providerCounts = receipts.reduce((acc, r) => { acc[r.provider] = (acc[r.provider] || 0) + 1; return acc; }, {} as Record<string, number>);
+            const top = Object.entries(providerCounts).sort((a, b) => b[1] - a[1])[0];
+            return top ? `Most active: ${top[0]}` : 'No provider activity';
+          })()}
+          subtext={(() => {
+            const providerCounts = receipts.reduce((acc, r) => { acc[r.provider] = (acc[r.provider] || 0) + 1; return acc; }, {} as Record<string, number>);
+            const top = Object.entries(providerCounts).sort((a, b) => b[1] - a[1])[0];
+            return top ? `${top[1]} actions recorded` : 'No data yet';
+          })()}
           trend="neutral"
           icon={<Zap className="h-5 w-5" />}
         />

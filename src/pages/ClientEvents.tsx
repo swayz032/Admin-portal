@@ -118,8 +118,9 @@ export default function ClientEvents() {
         if (srcRes.data) setSources([...new Set(srcRes.data.map((r: Record<string, unknown>) => r.source as string).filter(Boolean))].sort());
         if (sevRes.data) setSeverities([...new Set(sevRes.data.map((r: Record<string, unknown>) => r.severity as string).filter(Boolean))].sort());
         if (etRes.data) setEventTypes([...new Set(etRes.data.map((r: Record<string, unknown>) => r.event_type as string).filter(Boolean))].sort());
-      } catch {
-        // Non-critical — filters will just be empty
+      } catch (err) {
+        // Non-critical — filters will just be empty, but log for debugging
+        console.warn('[ClientEvents] Failed to fetch filter options:', err);
       }
     }
     fetchFilterOptions();

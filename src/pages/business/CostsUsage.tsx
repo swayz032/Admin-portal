@@ -84,7 +84,7 @@ export default function CostsUsage() {
       key: 'change', 
       header: 'MoM', 
       render: (v: VendorUsage) => {
-        const change = ((v.costThisMonth - v.costLastMonth) / v.costLastMonth * 100);
+        const change = v.costLastMonth !== 0 ? ((v.costThisMonth - v.costLastMonth) / v.costLastMonth * 100) : 0;
         return (
           <span className={change > 10 ? 'text-warning' : change < 0 ? 'text-success' : 'text-text-secondary'}>
             {change > 0 ? '+' : ''}{change.toFixed(1)}%

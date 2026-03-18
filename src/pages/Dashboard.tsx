@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KPICard } from '@/components/shared/KPICard';
 import { Panel } from '@/components/shared/Panel';
@@ -102,6 +103,9 @@ export default function Dashboard() {
       );
       refetchApprovals();
     } catch (_err) {
+      toast.error('Decision failed', {
+        description: 'The approval decision could not be saved. Please try again.',
+      });
       refetchApprovals();
     } finally {
       setIsSubmitting(false);

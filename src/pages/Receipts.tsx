@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Receipt, ReceiptStatus } from '@/contracts';
-import { listReceipts } from '@/services/apiClient';
+import { listReceipts, derivePremiumActionLabel } from '@/services/apiClient';
 import { formatTimeAgo } from '@/lib/formatters';
 import { formatReceiptId, formatCorrelationId } from '@/lib/premiumIds';
 import { redactPayload } from '@/lib/redactPayload';
@@ -142,7 +142,7 @@ export default function Receipts() {
         );
       }
     },
-    { key: 'action_type', header: 'What happened' },
+    { key: 'action_type', header: 'What happened', render: (r: Receipt) => <span className="text-sm">{derivePremiumActionLabel(r.action_type, 'operator')}</span> },
     { key: 'provider', header: 'Service', render: (r: Receipt) => r.provider || 'Internal' },
     {
       key: 'status',
@@ -171,7 +171,9 @@ export default function Receipts() {
       render: (r: Receipt) => <SourceBadge source={deriveSourceCategory(r.receipt_type ?? r.domain ?? '')} />,
     },
     { key: 'domain', header: 'Domain' },
-    { key: 'action_type', header: 'Action Type' },
+    { key: 'action_type', header: 'Action Type', render: (r: Receipt) => (
+      <span className="text-sm" title={r.action_type}>{derivePremiumActionLabel(r.action_type, 'engineer')}</span>
+    ) },
     {
       key: 'status',
       header: 'Status',
@@ -332,7 +334,9 @@ export default function Receipts() {
                     <span className="text-sm text-muted-foreground">
                       <ModeText operator="Action" engineer="Action Type" />
                     </span>
-                    <span className="text-sm">{selectedReceipt.action_type}</span>
+                    <span className="text-sm" title={viewMode === 'engineer' ? selectedReceipt.action_type : undefined}>
+                      {derivePremiumActionLabel(selectedReceipt.action_type, viewMode as 'operator' | 'engineer')}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">

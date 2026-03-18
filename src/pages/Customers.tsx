@@ -83,7 +83,8 @@ export default function Customers() {
   if (customersLoading) return <PageLoadingState showKPIs rows={5} />;
   if (customersError) return <EmptyState variant="error" title="Failed to load customers" description={customersError} actionLabel="Retry" onAction={refetchCustomers} />;
 
-  const filteredCustomers = customers.filter(c => {
+  const safeCustomers = customers ?? [];
+  const filteredCustomers = safeCustomers.filter(c => {
     const matchesSearch = searchTerm === '' ||
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (c.displayId && `STE-${c.displayId}`.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -93,10 +94,10 @@ export default function Customers() {
   });
 
   // Stats
-  const activeCustomers = customers.filter(c => c.status === 'Active').length;
-  const atRiskCustomers = customers.filter(c => c.status === 'At Risk').length;
-  const totalMRR = customers.reduce((sum, c) => sum + c.mrr, 0);
-  const totalMembers = customers.reduce((sum, c) => sum + (c.teamSize || 1), 0);
+  const activeCustomers = safeCustomers.filter(c => c.status === 'Active').length;
+  const atRiskCustomers = safeCustomers.filter(c => c.status === 'At Risk').length;
+  const totalMRR = safeCustomers.reduce((sum, c) => sum + c.mrr, 0);
+  const totalMembers = safeCustomers.reduce((sum, c) => sum + (c.teamSize || 1), 0);
 
   const quickStats = [
     { label: 'active', value: activeCustomers, status: 'success' as const },

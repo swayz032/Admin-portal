@@ -217,8 +217,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, s) => {
-        setSession(s);
         if (s?.access_token) {
+          // Set session and fetch user info atomically to prevent flash
+          // where session exists but user is still null
+          setSession(s);
           setTimeout(() => {
             fetchSessionInfo(s.access_token).catch(devWarn).finally(() => setLoading(false));
           }, 0);
@@ -230,8 +232,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
       if (s?.access_token) {
+        setSession(s);
         fetchSessionInfo(s.access_token).catch(devWarn).finally(() => setLoading(false));
       } else {
         setLoading(false);

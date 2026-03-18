@@ -12,7 +12,7 @@ import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { PublicRoute } from "./components/auth/PublicRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { supabaseConfigStatus } from "@/integrations/supabase/client";
-import { Loader2 } from "lucide-react";
+
 
 // Eagerly loaded (initial routes — no lazy)
 import Home from "./pages/Home";
@@ -71,7 +71,9 @@ const PatchJobPage = lazy(() => import("./pages/control-plane/PatchJobPage"));
 function PageLoader() {
   return (
     <div className="flex items-center justify-center h-64">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+      </div>
     </div>
   );
 }

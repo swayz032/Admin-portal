@@ -18,21 +18,20 @@ import { Button } from '@/components/ui/button';
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
-const eventData = [
-  { name: 'Jan 1', payments: 12, upgrades: 3, downgrades: 1, cancellations: 0 },
-  { name: 'Jan 2', payments: 8, upgrades: 2, downgrades: 0, cancellations: 1 },
-  { name: 'Jan 3', payments: 15, upgrades: 4, downgrades: 2, cancellations: 0 },
-  { name: 'Jan 4', payments: 10, upgrades: 1, downgrades: 0, cancellations: 0 },
-  { name: 'Jan 5', payments: 18, upgrades: 5, downgrades: 1, cancellations: 1 },
-  { name: 'Jan 6', payments: 14, upgrades: 2, downgrades: 0, cancellations: 0 },
-  { name: 'Jan 7', payments: 22, upgrades: 3, downgrades: 1, cancellations: 0 },
-];
-
-const planBreakdown = [
-  { plan: 'Enterprise', count: 3, mrr: 11497, percent: 93 },
-  { plan: 'Professional', count: 3, mrr: 797, percent: 6 },
-  { plan: 'Starter', count: 1, mrr: 99, percent: 1 },
-];
+/** Derive plan breakdown from live subscription data */
+function derivePlanBreakdown(subs: Subscription[]) {
+  const byPlan = subs.reduce((acc, s) => {
+    if (s.status === 'Active' || s.status === 'Trial') {
+      acc[s.plan] = acc[s.plan] || { plan: s.plan, count: 0, mrr: 0 };
+      acc[s.plan].count += 1;
+      acc[s.plan].mrr += s.mrr;
+    }
+    return acc;
+  }, {} as Record<string, { plan: string; count: number; mrr: number }>);
+  const plans = Object.values(byPlan).sort((a, b) => b.mrr - a.mrr);
+  const totalMrr = plans.reduce((s, p) => s + p.mrr, 0);
+  return plans.map(p => ({ ...p, percent: totalMrr > 0 ? Math.round((p.mrr / totalMrr) * 100) : 0 }));
+}
 
 const defaultBusinessMetrics = {
   totalMRR: 0, mrrGrowth: 0, activeCustomers: 0, newSubscriptions7d: 0,
@@ -53,6 +52,7 @@ export default function Subscriptions() {
 
   const activeSubscriptions = subscriptions.filter(s => s.status === 'Active' || s.status === 'Trial');
   const overdueSubscriptions = subscriptions.filter(s => s.status === 'Past Due');
+  const planBreakdown = derivePlanBreakdown(subscriptions);
 
   const getStatusType = (status: Subscription['status']) => {
     switch (status) {
@@ -137,10 +137,13 @@ export default function Subscriptions() {
           icon={overdueSubscriptions.length === 0 ? <CreditCard className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
         />
         <InsightPanel
-          headline="Net growth: +$901"
+          headline={(() => {
+            const net = (businessMetrics.expansionMRR || 0) - (businessMetrics.contractionMRR || 0);
+            return net >= 0 ? `Net growth: +${formatCurrency(net)}` : `Net contraction: ${formatCurrency(net)}`;
+          })()}
           subtext="After accounting for churn"
-          trend="positive"
-          icon={<TrendingUp className="h-5 w-5" />}
+          trend={(businessMetrics.expansionMRR || 0) >= (businessMetrics.contractionMRR || 0) ? 'positive' : 'negative'}
+          icon={(businessMetrics.expansionMRR || 0) >= (businessMetrics.contractionMRR || 0) ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
           linkTo="/business/revenue-addons"
           linkLabel="View breakdown"
         />

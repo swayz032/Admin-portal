@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ProviderCallLog, ProviderCallStatus } from '@/contracts';
-import { listProviderCallLogs } from '@/services/apiClient';
+import { listProviderCallLogs, derivePremiumActionLabel } from '@/services/apiClient';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { formatTimeAgo } from '@/lib/formatters';
 import { formatProviderCallId, formatCorrelationId } from '@/lib/premiumIds';
@@ -137,7 +137,7 @@ export default function ProviderCallLogPage() {
       header: 'Service',
       render: (l: ProviderCallLog) => <ProviderBadge provider={l.provider} />,
     },
-    { key: 'action_type', header: 'Action' },
+    { key: 'action_type', header: 'Action', render: (l: ProviderCallLog) => <span className="text-sm">{derivePremiumActionLabel(l.action_type, 'operator')}</span> },
     {
       key: 'duration',
       header: 'Time',
@@ -173,7 +173,7 @@ export default function ProviderCallLogPage() {
       header: 'Provider',
       render: (l: ProviderCallLog) => <ProviderBadge provider={l.provider} />,
     },
-    { key: 'action_type', header: 'Action Type' },
+    { key: 'action_type', header: 'Action Type', render: (l: ProviderCallLog) => <span className="text-sm" title={l.action_type}>{derivePremiumActionLabel(l.action_type, 'engineer')}</span> },
     {
       key: 'duration',
       header: 'Duration',
@@ -308,7 +308,9 @@ export default function ProviderCallLogPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Action</span>
-                    <span className="text-sm">{selectedLog.action_type}</span>
+                    <span className="text-sm" title={viewMode === 'engineer' ? selectedLog.action_type : undefined}>
+                      {derivePremiumActionLabel(selectedLog.action_type, viewMode as 'operator' | 'engineer')}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Started</span>

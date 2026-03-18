@@ -101,7 +101,7 @@ export default function RunwayBurn() {
       key: 'change', 
       header: 'Change', 
       render: (c: CostCategory) => {
-        const change = ((c.thisMonth - c.lastMonth) / c.lastMonth * 100);
+        const change = c.lastMonth !== 0 ? ((c.thisMonth - c.lastMonth) / c.lastMonth * 100) : 0;
         return (
           <span className={change > 0 ? 'text-warning' : 'text-success'}>
             {change > 0 ? '+' : ''}{change.toFixed(1)}%

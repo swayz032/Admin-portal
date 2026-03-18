@@ -195,11 +195,17 @@ export default function ConnectedApps() {
             icon={<CheckCircle className="h-5 w-5" />}
           />
           <InsightPanel
-            headline="Stripe most active"
-            subtext={`${providerList.find(p => p.name === 'Stripe')?.recentReceiptsCount || 0} actions this week`}
+            headline={(() => {
+              const top = [...providerList].sort((a, b) => (b.recentReceiptsCount ?? 0) - (a.recentReceiptsCount ?? 0))[0];
+              return top ? `${top.name} most active` : 'No activity yet';
+            })()}
+            subtext={(() => {
+              const top = [...providerList].sort((a, b) => (b.recentReceiptsCount ?? 0) - (a.recentReceiptsCount ?? 0))[0];
+              return top ? `${top.recentReceiptsCount ?? 0} actions this week` : 'No provider data';
+            })()}
             trend="positive"
             icon={<Zap className="h-5 w-5" />}
-            linkTo="/activity?provider=Stripe"
+            linkTo="/activity"
             linkLabel="View activity"
           />
           <InsightPanel
@@ -210,9 +216,9 @@ export default function ConnectedApps() {
           />
           {rotationSummary && (
             <InsightPanel
-              headline={`${rotationSummary.manual_alerted_with_adapter_modules.length} providers adapter-ready`}
-              subtext={`${rotationSummary.manual_alerted_without_adapter_modules.length} still have no automation adapter`}
-              trend={rotationSummary.manual_alerted_without_adapter_modules.length > 0 ? 'neutral' : 'positive'}
+              headline={`${(rotationSummary.manual_alerted_with_adapter_modules ?? []).length} providers adapter-ready`}
+              subtext={`${(rotationSummary.manual_alerted_without_adapter_modules ?? []).length} still have no automation adapter`}
+              trend={(rotationSummary.manual_alerted_without_adapter_modules ?? []).length > 0 ? 'neutral' : 'positive'}
               icon={<AlertTriangle className="h-5 w-5" />}
             />
           )}

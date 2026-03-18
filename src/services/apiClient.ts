@@ -265,7 +265,7 @@ export async function fetchN8nIncidents(): Promise<N8nIncidentGroup[]> {
   const { data, error } = await supabase
     .from('receipts')
     .select('receipt_type, status, action, result, created_at')
-    .in('status', ['FAILED', 'BLOCKED', 'DENIED'])
+    .in('status', ['failed', 'blocked', 'denied', 'FAILED', 'BLOCKED', 'DENIED'])
     .or('receipt_type.eq.n8n_ops,receipt_type.eq.n8n_agent')
     .order('created_at', { ascending: false })
     .limit(2000);
@@ -554,10 +554,157 @@ function derivePremiumSummary(
   if (rt === 'domain.check.denied')
     return 'Domain Verification Denied — Domain check blocked by RED tier governance policy. Requires explicit authority.';
 
-  // Generic fallback — still premium
-  const cleanType = receiptType.replace(/[._]/g, ' ');
+  // Calendar operations
+  if (rt.startsWith('calendar'))
+    return `Calendar ${status === 'failed' ? 'Error' : 'Issue'} — ${actionType || 'Calendar operation'} ${status}. ${errorMsg || 'Check calendar integration.'}`;
+
+  // QuickBooks / Accounting
+  if (rt.startsWith('quickbooks') || rt.startsWith('accounting'))
+    return `Accounting ${status === 'failed' ? 'Sync Error' : 'Issue'} — ${actionType || 'Books operation'} ${status}. ${errorMsg || 'Check QuickBooks connection.'}`;
+
+  // Twilio / Telephony
+  if (rt.startsWith('twilio') || rt.startsWith('call') || rt.startsWith('sms'))
+    return `Phone Service ${status === 'failed' ? 'Error' : 'Issue'} — ${actionType || 'Communication'} ${status}. ${errorMsg || 'Check Twilio status.'}`;
+
+  // LiveKit / Conference
+  if (rt.startsWith('livekit') || rt.startsWith('conference') || rt.startsWith('meeting'))
+    return `Video Conference ${status === 'failed' ? 'Error' : 'Issue'} — ${actionType || 'Meeting operation'} ${status}. ${errorMsg || 'Check LiveKit service.'}`;
+
+  // Deepgram / ElevenLabs (voice)
+  if (rt.startsWith('deepgram') || rt.startsWith('elevenlabs') || rt.startsWith('tts') || rt.startsWith('stt'))
+    return `Voice Service ${status === 'failed' ? 'Error' : 'Issue'} — ${actionType || 'Audio processing'} ${status}. ${errorMsg || 'Check voice service status.'}`;
+
+  // PandaDoc / Documents
+  if (rt.startsWith('pandadoc') || rt.startsWith('document') || rt.startsWith('contract'))
+    return `Document ${status === 'failed' ? 'Error' : 'Issue'} — ${actionType || 'Document operation'} ${status}. ${errorMsg || 'Check document service.'}`;
+
+  // Generic fallback — still premium with smart formatting
+  const cleanType = receiptType
+    .replace(/[._]/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .trim();
   if (errorMsg) return `${cleanType} — ${errorMsg}`;
   return `${cleanType} — Operation ${status}. Review receipt details for root cause.`;
+}
+
+/**
+ * Converts raw action_type values from the database into human-readable premium labels.
+ * Used on Receipts and Provider Call Log pages to replace cryptic snake_case values.
+ */
+export function derivePremiumActionLabel(actionType: string, viewMode: 'operator' | 'engineer' = 'operator'): string {
+  if (!actionType) return 'Unknown Action';
+  const at = actionType.toLowerCase().trim();
+
+  // ─── Knowledge & Search ───
+  if (at === 'search_general_knowledge') return viewMode === 'operator' ? 'Searched knowledge base' : 'Knowledge Base Search';
+  if (at === 'financial_retrieval') return viewMode === 'operator' ? 'Looked up financial data' : 'Financial Data Retrieval';
+  if (at === 'search_contacts') return viewMode === 'operator' ? 'Searched contacts' : 'Contact Search';
+  if (at === 'search_emails') return viewMode === 'operator' ? 'Searched emails' : 'Email Search';
+  if (at === 'web_search' || at === 'search_web') return viewMode === 'operator' ? 'Searched the web' : 'Web Search';
+  if (at === 'search_documents') return viewMode === 'operator' ? 'Searched documents' : 'Document Search';
+  if (at === 'search_invoices') return viewMode === 'operator' ? 'Searched invoices' : 'Invoice Search';
+  if (at === 'search_receipts') return viewMode === 'operator' ? 'Searched proof log' : 'Receipt Search';
+
+  // ─── Communication ───
+  if (at === 'send_email' || at === 'email_send') return viewMode === 'operator' ? 'Sent an email' : 'Email Send';
+  if (at === 'draft_email' || at === 'email_draft') return viewMode === 'operator' ? 'Drafted an email' : 'Email Draft';
+  if (at === 'reply_email') return viewMode === 'operator' ? 'Replied to email' : 'Email Reply';
+  if (at === 'handle_call' || at === 'inbound_call') return viewMode === 'operator' ? 'Handled a phone call' : 'Inbound Call Handler';
+  if (at === 'outbound_call' || at === 'make_call') return viewMode === 'operator' ? 'Made a phone call' : 'Outbound Call';
+  if (at === 'send_sms' || at === 'sms_send') return viewMode === 'operator' ? 'Sent a text message' : 'SMS Send';
+
+  // ─── Calendar ───
+  if (at === 'create_event' || at === 'calendar_create') return viewMode === 'operator' ? 'Created a calendar event' : 'Calendar Event Create';
+  if (at === 'update_event' || at === 'calendar_update') return viewMode === 'operator' ? 'Updated a calendar event' : 'Calendar Event Update';
+  if (at === 'delete_event' || at === 'calendar_delete') return viewMode === 'operator' ? 'Removed a calendar event' : 'Calendar Event Delete';
+  if (at === 'list_events' || at === 'calendar_list') return viewMode === 'operator' ? 'Checked calendar' : 'Calendar List Events';
+  if (at === 'check_availability') return viewMode === 'operator' ? 'Checked availability' : 'Availability Check';
+
+  // ─── Invoicing & Payments ───
+  if (at === 'create_invoice' || at === 'invoice_create') return viewMode === 'operator' ? 'Created an invoice' : 'Invoice Create';
+  if (at === 'send_invoice' || at === 'invoice_send') return viewMode === 'operator' ? 'Sent an invoice' : 'Invoice Send';
+  if (at === 'void_invoice') return viewMode === 'operator' ? 'Voided an invoice' : 'Invoice Void';
+  if (at === 'refund_payment' || at === 'payment_refund') return viewMode === 'operator' ? 'Refunded a payment' : 'Payment Refund';
+  if (at === 'charge_payment' || at === 'payment_charge') return viewMode === 'operator' ? 'Processed a payment' : 'Payment Charge';
+  if (at === 'create_customer' || at === 'stripe_customer_create') return viewMode === 'operator' ? 'Created customer account' : 'Stripe Customer Create';
+  if (at === 'create_payment_link') return viewMode === 'operator' ? 'Created payment link' : 'Payment Link Create';
+
+  // ─── Accounting ───
+  if (at === 'sync_books' || at === 'quickbooks_sync') return viewMode === 'operator' ? 'Synced accounting records' : 'QuickBooks Sync';
+  if (at === 'create_expense') return viewMode === 'operator' ? 'Recorded an expense' : 'Expense Create';
+  if (at === 'categorize_transaction') return viewMode === 'operator' ? 'Categorized a transaction' : 'Transaction Categorize';
+  if (at === 'reconcile_accounts') return viewMode === 'operator' ? 'Reconciled accounts' : 'Account Reconciliation';
+
+  // ─── Documents & Contracts ───
+  if (at === 'generate_pdf' || at === 'pdf_generate') return viewMode === 'operator' ? 'Generated a document' : 'PDF Generation';
+  if (at === 'create_contract' || at === 'contract_create') return viewMode === 'operator' ? 'Created a contract' : 'Contract Create';
+  if (at === 'send_for_signature') return viewMode === 'operator' ? 'Sent for signature' : 'E-Signature Request';
+  if (at === 'sign_document') return viewMode === 'operator' ? 'Signed a document' : 'Document Sign';
+
+  // ─── Mail Management ───
+  if (at.startsWith('mail.') || at.startsWith('mail_')) {
+    const mailAction = at.replace(/^mail[._]/, '');
+    if (mailAction.includes('onboarding')) return viewMode === 'operator' ? 'Setting up email' : 'Mail Onboarding';
+    if (mailAction.includes('oauth')) return viewMode === 'operator' ? 'Connecting email account' : 'Mail OAuth Flow';
+    if (mailAction.includes('domain')) return viewMode === 'operator' ? 'Configuring email domain' : 'Domain Configuration';
+    if (mailAction.includes('send')) return viewMode === 'operator' ? 'Sent email' : 'Mail Send';
+    return viewMode === 'operator' ? 'Email operation' : `Mail: ${mailAction.replace(/[._]/g, ' ')}`;
+  }
+
+  // ─── Orchestrator ───
+  if (at === 'orchestrator_run' || at === 'brain_run') return viewMode === 'operator' ? 'Ava processed a request' : 'Orchestrator Run';
+  if (at === 'tool_call' || at === 'tool_execution') return viewMode === 'operator' ? 'Used a tool' : 'Tool Execution';
+  if (at === 'param_extraction') return viewMode === 'operator' ? 'Parsed request parameters' : 'Parameter Extraction';
+  if (at === 'approval_request') return viewMode === 'operator' ? 'Asked for your approval' : 'Approval Request';
+  if (at === 'approval_grant') return viewMode === 'operator' ? 'Approval granted' : 'Approval Grant';
+  if (at === 'approval_deny') return viewMode === 'operator' ? 'Approval denied' : 'Approval Deny';
+
+  // ─── Conference / Video ───
+  if (at === 'create_room' || at === 'livekit_create_room') return viewMode === 'operator' ? 'Created a meeting room' : 'LiveKit Room Create';
+  if (at === 'join_room' || at === 'livekit_join') return viewMode === 'operator' ? 'Joined a meeting' : 'LiveKit Room Join';
+  if (at === 'transcribe' || at === 'deepgram_transcribe') return viewMode === 'operator' ? 'Transcribed audio' : 'Audio Transcription';
+  if (at === 'tts' || at === 'text_to_speech' || at === 'elevenlabs_tts') return viewMode === 'operator' ? 'Generated voice audio' : 'Text-to-Speech';
+
+  // ─── Auth & Security ───
+  if (at === 'auth_denial' || at === 'access_denied') return viewMode === 'operator' ? 'Access blocked (unauthorized)' : 'Authentication Denial';
+  if (at === 'csrf_check' || at === 'csrf_rejected') return viewMode === 'operator' ? 'Security check (CSRF)' : 'CSRF Token Validation';
+  if (at === 'token_mint' || at === 'capability_token_mint') return viewMode === 'operator' ? 'Created access token' : 'Capability Token Mint';
+  if (at === 'token_verify') return viewMode === 'operator' ? 'Verified access token' : 'Token Verification';
+
+  // ─── Domain & DNS ───
+  if (at === 'domain_check' || at === 'check_domain') return viewMode === 'operator' ? 'Checked domain status' : 'Domain Check';
+  if (at === 'domain_provision') return viewMode === 'operator' ? 'Set up domain' : 'Domain Provision';
+  if (at === 'dns_verify') return viewMode === 'operator' ? 'Verified DNS records' : 'DNS Verification';
+
+  // ─── n8n Workflows ───
+  if (at.startsWith('n8n_') || at.startsWith('workflow_')) {
+    const wfAction = at.replace(/^(n8n_|workflow_)/, '');
+    if (wfAction.includes('trigger')) return viewMode === 'operator' ? 'Triggered automation' : 'Workflow Trigger';
+    if (wfAction.includes('execute')) return viewMode === 'operator' ? 'Ran automation' : 'Workflow Execute';
+    if (wfAction.includes('error')) return viewMode === 'operator' ? 'Automation error' : 'Workflow Error';
+    return viewMode === 'operator' ? 'Automation task' : `Workflow: ${wfAction.replace(/[._]/g, ' ')}`;
+  }
+
+  // ─── Payroll ───
+  if (at === 'run_payroll' || at === 'payroll_run') return viewMode === 'operator' ? 'Processed payroll' : 'Payroll Run';
+  if (at === 'calculate_taxes') return viewMode === 'operator' ? 'Calculated taxes' : 'Tax Calculation';
+
+  // ─── Research ───
+  if (at === 'vendor_search') return viewMode === 'operator' ? 'Searched for vendors' : 'Vendor Search';
+  if (at === 'market_research') return viewMode === 'operator' ? 'Market research' : 'Market Research';
+
+  // ─── Profile / Onboarding ───
+  if (at === 'profile_update' || at === 'onboarding.profile_update') return viewMode === 'operator' ? 'Updated profile' : 'Profile Update';
+  if (at === 'onboarding_start') return viewMode === 'operator' ? 'Started setup' : 'Onboarding Start';
+
+  // ─── Smart fallback: convert snake_case/dot.notation to readable text ───
+  const cleaned = actionType
+    .replace(/[._]/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return viewMode === 'operator' ? cleaned : cleaned;
 }
 
 function deriveProvider(

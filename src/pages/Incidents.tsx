@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useSystem } from '@/contexts/SystemContext';
 import type { Incident } from '@/data/seed';
 import { useUnifiedIncidents } from '@/hooks/useUnifiedIncidents';
@@ -30,7 +29,7 @@ import { formatTimeAgo } from '@/lib/formatters';
 import { formatIncidentId } from '@/lib/premiumIds';
 import { CopyableId } from '@/components/shared/CopyableId';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
-import { AlertTriangle, Sparkles, ChevronDown, CheckCircle, Shield, GitBranch } from 'lucide-react';
+import { AlertTriangle, Sparkles, CheckCircle, Shield, GitBranch } from 'lucide-react';
 
 export default function Incidents() {
   const { viewMode } = useSystem();
@@ -38,7 +37,6 @@ export default function Incidents() {
   const [searchParams] = useSearchParams();
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [analysisDialog, setAnalysisDialog] = useState<Incident | null>(null);
-  const [showAllItems, setShowAllItems] = useState(false);
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const { copiedId, copyToClipboard } = useCopyToClipboard();
 
@@ -185,7 +183,7 @@ export default function Incidents() {
         />
       </div>
 
-      {/* Source Filter + Collapsible Detail Table */}
+      {/* Source Filter */}
       <div className="flex items-center gap-3">
         <Select value={sourceFilter} onValueChange={setSourceFilter}>
           <SelectTrigger className="w-[160px]">
@@ -202,26 +200,16 @@ export default function Incidents() {
         </Select>
       </div>
 
-      <Collapsible open={showAllItems} onOpenChange={setShowAllItems}>
-        <CollapsibleTrigger asChild>
-          <Button variant="outline" className="w-full flex items-center justify-between">
-            <span>{viewMode === 'operator' ? 'View all issues' : 'View all incidents'}</span>
-            <ChevronDown className={`h-4 w-4 transition-transform ${showAllItems ? 'rotate-180' : ''}`} />
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-4">
-          <Panel noPadding>
-            <DataTable
-              columns={columns}
-              data={sourceFiltered}
-              keyExtractor={(i: Incident) => i.id}
-              onRowClick={(i) => setSelectedIncident(i)}
-              emptyMessage={viewMode === 'operator' ? "No issues in this category." : "No incidents in this category."}
-              resultLabel="pipeline failures"
-            />
-          </Panel>
-        </CollapsibleContent>
-      </Collapsible>
+      <Panel noPadding>
+        <DataTable
+          columns={columns}
+          data={sourceFiltered}
+          keyExtractor={(i: Incident) => i.id}
+          onRowClick={(i) => setSelectedIncident(i)}
+          emptyMessage={viewMode === 'operator' ? "No issues in this category." : "No incidents in this category."}
+          resultLabel="pipeline failures"
+        />
+      </Panel>
 
       {/* Incident Detail Dialog */}
       <Dialog open={!!selectedIncident} onOpenChange={() => setSelectedIncident(null)}>
