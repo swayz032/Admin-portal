@@ -26,6 +26,20 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
+interface ClientEventRaw {
+  id: string;
+  source: string;
+  severity: string;
+  event_type: string;
+  correlation_id: string | null;
+  component: string | null;
+  page_route: string | null;
+  data: Record<string, unknown> | null;
+  created_at: string;
+  session_id: string | null;
+  tenant_id: string | null;
+}
+
 interface ClientEvent {
   id: string;
   source: string;
@@ -37,6 +51,27 @@ interface ClientEvent {
   created_at: string;
   session_id: string | null;
   user_agent: string | null;
+  component: string | null;
+  page_route: string | null;
+}
+
+/** Extract human-readable fields from the raw DB row's `data` jsonb column */
+function mapClientEvent(raw: ClientEventRaw): ClientEvent {
+  const data = raw.data ?? {};
+  return {
+    id: raw.id,
+    source: raw.source ?? 'unknown',
+    severity: raw.severity ?? 'info',
+    event_type: raw.event_type,
+    message: (data.message as string) ?? (data.error_code as string) ?? raw.event_type ?? '',
+    correlation_id: raw.correlation_id,
+    metadata: data,
+    created_at: raw.created_at,
+    session_id: raw.session_id,
+    user_agent: (data.user_agent as string) ?? null,
+    component: raw.component ?? (data.component as string) ?? null,
+    page_route: raw.page_route ?? (data.page_route as string) ?? null,
+  };
 }
 
 const PAGE_SIZE = 50;
@@ -97,7 +132,7 @@ export default function ClientEvents() {
         throw new Error(queryError.message);
       }
 
-      setEvents((data ?? []) as unknown as ClientEvent[]);
+      setEvents((data ?? []).map((row: Record<string, unknown>) => mapClientEvent(row as unknown as ClientEventRaw)));
       setTotalCount(count ?? 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch client events');
@@ -141,7 +176,7 @@ export default function ClientEvents() {
         { event: 'INSERT', schema: 'public', table: 'client_events' } as { event: string; schema: string },
         (payload: { new: Record<string, unknown> }) => {
           setIsLive(true);
-          const newEvent = payload.new as unknown as ClientEvent;
+          const newEvent = mapClientEvent(payload.new as unknown as ClientEventRaw);
           // Only prepend if on page 0 and no conflicting filters
           if (page === 0) {
             setEvents(prev => {
