@@ -593,3 +593,31 @@ export async function isOpsFacadeAvailable(): Promise<boolean> {
     return false;
   }
 }
+
+// =============================================================================
+// Admin Ava Chat Types
+// =============================================================================
+
+export interface OpsChatHistoryEntry {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface OpsChatRequest {
+  message: string;
+  history?: OpsChatHistoryEntry[];
+  context?: {
+    attachments?: Array<{ type: string; id: string }>;
+  };
+}
+
+export type OpsChatSseEventType = 'delta' | 'reasoning' | 'done' | 'error' | 'activity';
+
+export interface OpsChatSseEvent {
+  type: OpsChatSseEventType;
+  content?: string;
+  reasoning?: string;
+  receipt_id?: string;
+  code?: string;
+  message?: string;
+}

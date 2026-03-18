@@ -7,7 +7,7 @@
  */
 
 import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react';
-import { getAdminToken, getSuiteId } from '@/lib/adminAuth';
+import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 import { useOpsDesk, type OpsDeskReceipt, type TranscriptEntry, type PatchJob } from '@/contexts/OpsDeskContext';
 
 // ── Message Types ──────────────────────────────────────────────────
@@ -141,20 +141,22 @@ export function AdminAvaChatProvider({ children }: { children: ReactNode }) {
     abortRef.current = controller;
 
     try {
-      const adminToken = getAdminToken();
-      const suiteId = getSuiteId();
-
-      const response = await fetch('/api/v1/intents?stream=true', {
+      const response = await fetch(buildOpsFacadeUrl('/admin/ops/chat'), {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Token': adminToken,
-          'X-Suite-Id': suiteId,
+          ...buildOpsHeaders({ includeJson: true, includeAdminToken: true, includeSuiteId: false }),
           Accept: 'text/event-stream',
         },
         body: JSON.stringify({
-          intent: text,
-          channel: 'admin_chat',
+          message: text,
+          history: messages
+            .filter(m => m.role === 'user' || m.role === 'ava')
+            .filter(m => m.type === 'text')
+            .slice(-40)
+            .map(m => ({
+              role: m.role === 'ava' ? 'assistant' : 'user',
+              content: m.content,
+            })),
           context: {
             attachments: opsDesk.attachments.map(a => ({
               type: a.type,
