@@ -146,17 +146,23 @@ export async function fetchIncidents(filters?: {
   status?: string;
   page?: number;
   pageSize?: number;
+  view?: 'grouped' | 'all';
 }): Promise<PaginatedResult<Incident>> {
   // Fetch ALL pipeline failure receipts (no pagination on raw rows — we aggregate)
+  // DB CHECK constraint: PENDING/SUCCEEDED/FAILED/DENIED only — match exactly
   const { data, error } = await supabase
     .from('receipts')
     .select('receipt_id, receipt_type, status, action, result, correlation_id, suite_id, tenant_id, actor_id, created_at')
-    .in('status', ['failed', 'blocked', 'denied', 'FAILED', 'BLOCKED', 'DENIED'])
+    .in('status', ['FAILED', 'DENIED'])
     .not('receipt_type', 'like', 'n8n_%')
     .order('created_at', { ascending: false })
-    .limit(2000);
+    .limit(5000);
 
-  if (error) throw new ApiError(`Failed to fetch incidents: ${error.message}`, error.code);
+  if (error) {
+    console.error('[fetchIncidents] Supabase error:', error.message, error.code, error.details);
+    throw new ApiError(`Failed to fetch incidents: ${error.message}`, error.code);
+  }
+  console.log(`[fetchIncidents] Raw failure rows: ${data?.length ?? 0}, view: ${filters?.view ?? 'grouped'}`);
 
   // Aggregate by fingerprint key: receipt_type + action_type + status
   const groups = new Map<string, {
@@ -199,6 +205,16 @@ export async function fetchIncidents(filters?: {
     }
   }
 
+  // "All Events" view: return every raw failure as its own incident
+  if (filters?.view === 'all') {
+    let allIncidents = (data ?? []).map((row) => mapIncidentRow(row as Record<string, unknown>));
+    if (filters?.severity) {
+      allIncidents = allIncidents.filter(i => i.severity === filters.severity);
+    }
+    console.log(`[fetchIncidents] All-events view: ${allIncidents.length} individual incidents`);
+    return { data: allIncidents, count: allIncidents.length, page: 1, pageSize: allIncidents.length };
+  }
+
   // Convert groups to Incident objects
   const now = new Date();
   const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
@@ -237,6 +253,7 @@ export async function fetchIncidents(filters?: {
   }
 
   // Return ALL aggregated groups (typically 20-80 groups from ~2000 raw rows)
+  console.log(`[fetchIncidents] Grouped view: ${incidents.length} groups from ${data?.length ?? 0} raw rows`);
   return {
     data: incidents,
     count: incidents.length,
@@ -265,7 +282,7 @@ export async function fetchN8nIncidents(): Promise<N8nIncidentGroup[]> {
   const { data, error } = await supabase
     .from('receipts')
     .select('receipt_type, status, action, result, created_at')
-    .in('status', ['failed', 'blocked', 'denied', 'FAILED', 'BLOCKED', 'DENIED'])
+    .in('status', ['FAILED', 'DENIED'])
     .or('receipt_type.eq.n8n_ops,receipt_type.eq.n8n_agent')
     .order('created_at', { ascending: false })
     .limit(2000);
@@ -604,6 +621,40 @@ export function derivePremiumActionLabel(actionType: string, viewMode: 'operator
   if (at === 'search_documents') return viewMode === 'operator' ? 'Searched documents' : 'Document Search';
   if (at === 'search_invoices') return viewMode === 'operator' ? 'Searched invoices' : 'Invoice Search';
   if (at === 'search_receipts') return viewMode === 'operator' ? 'Searched proof log' : 'Receipt Search';
+
+  // ─── RAG & Retrieval (real DB action types) ───
+  if (at === 'rag.retrieve' || at === 'rag.route_and_retrieve')
+    return viewMode === 'operator' ? 'Searched knowledge base' : 'RAG Retrieval';
+
+  // ─── Parameter Extraction (orchestrator preparing tool calls) ───
+  if (at.startsWith('param_extract.')) {
+    const target = at.replace(/^param_extract\./, '').replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    return viewMode === 'operator' ? `Preparing ${target}` : `Param Extract: ${target}`;
+  }
+
+  // ─── Tool Execution ───
+  if (at.startsWith('execute.')) {
+    const target = at.replace(/^execute\./, '').replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    return viewMode === 'operator' ? `Running ${target}` : `Execute: ${target}`;
+  }
+
+  // ─── Resume (retry of previous action) ───
+  if (at.startsWith('resume.')) {
+    const target = at.replace(/^resume\./, '').replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    return viewMode === 'operator' ? `Retrying ${target}` : `Resume: ${target}`;
+  }
+
+  // ─── Intent Processing ───
+  if (at === 'intent.process')
+    return viewMode === 'operator' ? 'Processing your request' : 'Intent Processing';
+
+  // ─── Stripe (real DB types) ───
+  if (at === 'stripe.authorize')
+    return viewMode === 'operator' ? 'Connecting to Stripe' : 'Stripe Authorization';
+
+  // ─── Domain (real DB types) ───
+  if (at === 'domain.check.denied')
+    return viewMode === 'operator' ? 'Domain check blocked' : 'Domain Check Denied';
 
   // ─── Communication ───
   if (at === 'send_email' || at === 'email_send') return viewMode === 'operator' ? 'Sent an email' : 'Email Send';
@@ -1229,15 +1280,15 @@ export async function fetchBusinessMetrics(): Promise<BusinessMetrics> {
   const { data: failedReceipts, error: failedPaymentErr } = await supabase
     .from('receipts')
     .select('*')
-    .eq('status', 'failed')
+    .in('status', ['FAILED', 'failed'])
     .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
   const failedPaymentCount = failedPaymentErr
     ? 0
     : (failedReceipts ?? []).filter((r) => {
-        const actionType = String((r as Record<string, unknown>).action_type ?? '').toLowerCase();
-        const payload = ((r as Record<string, unknown>).payload as Record<string, unknown> | undefined) ?? {};
-        const payloadDomain = String(payload.domain ?? '').toLowerCase();
-        return actionType.includes('payment') || payloadDomain === 'payments';
+        const action = ((r as Record<string, unknown>).action as Record<string, unknown>) ?? {};
+        const actionType = String(action.action_type ?? '').toLowerCase();
+        const receiptType = String((r as Record<string, unknown>).receipt_type ?? '').toLowerCase();
+        return actionType.includes('payment') || actionType.includes('invoice') || receiptType.startsWith('stripe');
       }).length;
 
   return {
@@ -1276,6 +1327,8 @@ export interface OpsMetrics {
   queueHealth: { depth: number; lag: number; retries: number };
   llmAnalyst: { status: string; lastAnalysis: string };
   errorBudget: { remaining: number; burnRate: number };
+  _providerCallsExist: boolean;
+  mttr: { minutes: number; sampleSize: number };
 }
 
 export async function fetchOpsMetrics(): Promise<OpsMetrics> {
@@ -1286,14 +1339,20 @@ export async function fetchOpsMetrics(): Promise<OpsMetrics> {
   // Parallel queries for efficiency
   const [approvalsRes, receiptsRes, outboxRes, callsRes] = await Promise.all([
     supabase.from('approval_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    supabase.from('receipts').select('status, domain, payload', { count: 'exact' }).gte('created_at', todayStr),
+    supabase.from('receipts').select('status, receipt_type, action', { count: 'exact' }).gte('created_at', todayStr),
     supabase.from('outbox_jobs').select('status, attempts', { count: 'exact' }).in('status', ['queued', 'processing', 'retrying']),
     supabase.from('provider_call_log').select('duration_ms, status').gte('started_at', todayStr).order('duration_ms', { ascending: false }).limit(100),
   ]);
 
   const todayReceipts = receiptsRes.data ?? [];
-  const successToday = todayReceipts.filter(r => r.status === 'success').length;
-  const failedToday = todayReceipts.filter(r => r.status === 'failed' || r.status === 'blocked');
+  const successToday = todayReceipts.filter(r => {
+    const s = ((r.status as string) ?? '').toUpperCase();
+    return s === 'SUCCEEDED';
+  }).length;
+  const failedToday = todayReceipts.filter(r => {
+    const s = ((r.status as string) ?? '').toUpperCase();
+    return s === 'FAILED' || s === 'DENIED';
+  });
 
   // Derive incident severity counts from today's failures
   const incidentCounts = { p0: 0, p1: 0, p2: 0, p3: 0 };
@@ -1306,11 +1365,17 @@ export async function fetchOpsMetrics(): Promise<OpsMetrics> {
   const retrying = outboxJobs.filter(j => (j.attempts as number) > 1).length;
 
   const calls = callsRes.data ?? [];
+  const providerCallsExist = calls.length > 0;
   const p95Index = Math.floor(calls.length * 0.95);
-  const p95Latency = calls.length > 0 ? (calls[p95Index]?.duration_ms as number) ?? 0 : 0;
+  const p95Latency = providerCallsExist ? (calls[p95Index]?.duration_ms as number) ?? 0 : 0;
   const callErrors = calls.filter(c => c.status !== 'success').length;
-  const providerStatus = callErrors > calls.length * 0.05 ? 'Degraded'
+  const providerStatus = !providerCallsExist ? 'No data'
+    : callErrors > calls.length * 0.05 ? 'Degraded'
     : callErrors > 0 ? 'Partial' : 'Healthy';
+
+  // MTTR approximation: for each receipt_type that has both FAILED and SUCCEEDED
+  // today, measure avg time from first failure to first subsequent success.
+  const mttr = calculateMTTR(todayReceipts);
 
   return {
     openApprovals: approvalsRes.count ?? 0,
@@ -1327,7 +1392,43 @@ export async function fetchOpsMetrics(): Promise<OpsMetrics> {
         ? Number(((failedToday.length / todayReceipts.length) * 100).toFixed(1))
         : 0,
     },
+    _providerCallsExist: providerCallsExist,
+    mttr,
   };
+}
+
+/** Approximate MTTR: avg time between first FAILED and first subsequent SUCCEEDED per receipt_type group. */
+function calculateMTTR(receipts: Record<string, unknown>[]): { minutes: number; sampleSize: number } {
+  // Group by receipt_type
+  const groups = new Map<string, { failed: string[]; succeeded: string[] }>();
+  for (const r of receipts) {
+    const rt = String(r.receipt_type ?? '');
+    const status = String(r.status ?? '').toUpperCase();
+    const ts = String(r.created_at ?? '');
+    if (!rt || !ts) continue;
+    if (!groups.has(rt)) groups.set(rt, { failed: [], succeeded: [] });
+    const g = groups.get(rt)!;
+    if (status === 'FAILED') g.failed.push(ts);
+    else if (status === 'SUCCEEDED') g.succeeded.push(ts);
+  }
+
+  const recoveryTimesMs: number[] = [];
+  for (const [, g] of groups) {
+    if (g.failed.length === 0 || g.succeeded.length === 0) continue;
+    // Sort ascending
+    g.failed.sort();
+    g.succeeded.sort();
+    const firstFailure = new Date(g.failed[0]).getTime();
+    // Find first success AFTER the first failure
+    const recovery = g.succeeded.find(s => new Date(s).getTime() > firstFailure);
+    if (recovery) {
+      recoveryTimesMs.push(new Date(recovery).getTime() - firstFailure);
+    }
+  }
+
+  if (recoveryTimesMs.length === 0) return { minutes: 0, sampleSize: 0 };
+  const avgMs = recoveryTimesMs.reduce((a, b) => a + b, 0) / recoveryTimesMs.length;
+  return { minutes: Math.round(avgMs / 60000), sampleSize: recoveryTimesMs.length };
 }
 
 // ============================================================================
@@ -2198,4 +2299,23 @@ export async function getEcosystemSyncStatus(): Promise<EcosystemSyncStatus> {
     drift_warnings: [],
     last_sync_check: new Date().toISOString(),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Incident Category Derivation — data-driven from receipt_type
+// ---------------------------------------------------------------------------
+
+export function deriveCategoryFromReceiptType(receiptType: string): { id: string; label: string } {
+  if (receiptType === 'orchestrator') return { id: 'orchestrator', label: 'Orchestrator' };
+  if (receiptType === 'param_extraction') return { id: 'param_extraction', label: 'Param Extraction' };
+  if (receiptType === 'tool_execution') return { id: 'tool_execution', label: 'Tool Execution' };
+  if (receiptType.startsWith('mail.')) return { id: 'mail', label: 'Mail' };
+  if (receiptType.startsWith('onboarding.')) return { id: 'onboarding', label: 'Onboarding' };
+  if (receiptType.startsWith('stripe')) return { id: 'stripe', label: 'Stripe' };
+  if (receiptType.startsWith('domain')) return { id: 'domain', label: 'Domain' };
+  if (receiptType === 'auth_denial') return { id: 'security', label: 'Security' };
+  if (receiptType.startsWith('conference.')) return { id: 'conference', label: 'Conference' };
+  if (receiptType.startsWith('plaid.')) return { id: 'plaid', label: 'Plaid' };
+  if (receiptType.startsWith('calendar.')) return { id: 'calendar', label: 'Calendar' };
+  return { id: 'other', label: 'Other' };
 }

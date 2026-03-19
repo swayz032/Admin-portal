@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { PageHero } from '@/components/shared/PageHero';
 import { QuickStats } from '@/components/shared/QuickStats';
@@ -12,6 +12,7 @@ import { SourceBadge, deriveSourceCategory } from '@/components/shared/SourceBad
 import { OccurrenceBadge } from '@/components/shared/OccurrenceBadge';
 import { ModeText } from '@/components/shared/ModeText';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -27,32 +28,80 @@ import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatTimeAgo } from '@/lib/formatters';
 import { formatIncidentId } from '@/lib/premiumIds';
+import { deriveCategoryFromReceiptType } from '@/services/apiClient';
 import { CopyableId } from '@/components/shared/CopyableId';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
-import { AlertTriangle, Sparkles, CheckCircle, Shield, GitBranch } from 'lucide-react';
+import { AlertTriangle, Sparkles, CheckCircle, Shield, GitBranch, List, Layers } from 'lucide-react';
+
+// Category type for data-driven tabs
+interface CategoryDef {
+  id: string;
+  label: string;
+  count: number;
+  filter: (i: Incident) => boolean;
+}
 
 export default function Incidents() {
   const { viewMode } = useSystem();
-  const { data: incidents, loading: incidentsLoading, error: incidentsError, refetch: refetchIncidents } = useUnifiedIncidents();
+  const [viewType, setViewType] = useState<'grouped' | 'all'>('all');
+  const { data: incidents, loading: incidentsLoading, error: incidentsError, refetch: refetchIncidents } = useUnifiedIncidents({ view: viewType });
   const [searchParams] = useSearchParams();
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [analysisDialog, setAnalysisDialog] = useState<Incident | null>(null);
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [categoryTab, setCategoryTab] = useState<string>('all');
   const { copiedId, copyToClipboard } = useCopyToClipboard();
+
+  // Build categories dynamically from actual receipt_type distribution
+  const dynamicCategories: CategoryDef[] = useMemo(() => {
+    const catMap = new Map<string, { label: string; count: number }>();
+    for (const i of incidents) {
+      const cat = deriveCategoryFromReceiptType(i.receiptType ?? '');
+      const existing = catMap.get(cat.id);
+      if (existing) existing.count++;
+      else catMap.set(cat.id, { label: cat.label, count: 1 });
+    }
+    const sorted = [...catMap.entries()]
+      .sort((a, b) => b[1].count - a[1].count)
+      .map(([id, { label, count }]) => ({
+        id,
+        label,
+        count,
+        filter: (inc: Incident) => deriveCategoryFromReceiptType(inc.receiptType ?? '').id === id,
+      }));
+    return [
+      { id: 'all', label: 'All', count: incidents.length, filter: () => true },
+      ...sorted,
+    ];
+  }, [incidents]);
 
   if (incidentsLoading) return <PageLoadingState showKPIs rows={5} />;
   if (incidentsError) return <EmptyState variant="error" title="Failed to load incidents" description={incidentsError} actionLabel="Retry" onAction={refetchIncidents} />;
 
-  // Apply source filter globally (affects stats, actions, insights, AND table)
+  // Apply category filter
+  const categoryDef = dynamicCategories.find(c => c.id === categoryTab) ?? dynamicCategories[0];
+  const categoryFiltered = incidents.filter(categoryDef.filter);
+
+  // Severity distribution for the active category
+  const severityCounts = useMemo(() => {
+    return {
+      P0: categoryFiltered.filter(i => i.severity === 'P0').length,
+      P1: categoryFiltered.filter(i => i.severity === 'P1').length,
+      P2: categoryFiltered.filter(i => i.severity === 'P2').length,
+      P3: categoryFiltered.filter(i => i.severity === 'P3').length,
+    };
+  }, [categoryFiltered]);
+
+  // Apply source filter
   const sourceFiltered = sourceFilter === 'all'
-    ? incidents
-    : incidents.filter(i => deriveSourceCategory(i.receiptType ?? '') === sourceFilter);
+    ? categoryFiltered
+    : categoryFiltered.filter(i => deriveSourceCategory(i.receiptType ?? '') === sourceFilter);
 
   const openIncidents = sourceFiltered.filter(i => i.status === 'Open');
   const resolvedIncidents = sourceFiltered.filter(i => i.status === 'Resolved');
 
   // Build priority actions from open incidents
-  const priorityActions: ActionItem[] = openIncidents.map(i => ({
+  const priorityActions: ActionItem[] = openIncidents.slice(0, 10).map(i => ({
     id: i.id,
     title: i.summary,
     description: `${i.severity} • ${i.customer}`,
@@ -63,6 +112,7 @@ export default function Incidents() {
 
   // Quick stats
   const quickStats = [
+    { label: 'total failures', value: incidents.length, status: incidents.length > 0 ? 'warning' as const : 'success' as const },
     { label: 'open', value: openIncidents.length, status: openIncidents.length > 0 ? 'warning' as const : 'success' as const },
     { label: 'critical (P0)', value: openIncidents.filter(i => i.severity === 'P0').length, status: 'critical' as const },
     { label: 'resolved this week', value: resolvedIncidents.length, status: 'success' as const },
@@ -109,6 +159,11 @@ export default function Incidents() {
       render: (i: Incident) => <StatusChip status={i.status === 'Open' ? 'warning' : 'success'} label={i.status} />
     },
     {
+      key: 'receiptType',
+      header: 'Type',
+      render: (i: Incident) => <span className="text-xs font-mono text-muted-foreground">{i.receiptType ?? '—'}</span>,
+    },
+    {
       key: 'source',
       header: 'Source',
       render: (i: Incident) => <SourceBadge source={deriveSourceCategory(i.receiptType ?? '')} />,
@@ -138,7 +193,7 @@ export default function Incidents() {
           : `${openIncidents.length} issue${openIncidents.length !== 1 ? 's' : ''} need your attention`}
         subtitle={viewMode === 'operator'
           ? "Track and resolve problems affecting your customers"
-          : "Monitor and manage system incidents"}
+          : `${incidents.length} total pipeline failures — ${viewType === 'all' ? 'individual events' : `${incidents.length} aggregated groups`}`}
         icon={openIncidents.length === 0 ? <CheckCircle className="h-6 w-6" /> : <AlertTriangle className="h-6 w-6" />}
         status={openIncidents.length === 0
           ? { type: 'success', label: 'All healthy' }
@@ -183,22 +238,80 @@ export default function Incidents() {
         />
       </div>
 
-      {/* Source Filter */}
-      <div className="flex items-center gap-3">
-        <Select value={sourceFilter} onValueChange={setSourceFilter}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="All Sources" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Sources</SelectItem>
-            <SelectItem value="backend">Backend</SelectItem>
-            <SelectItem value="desktop">Desktop</SelectItem>
-            <SelectItem value="provider">Provider</SelectItem>
-            <SelectItem value="orchestrator">Orchestrator</SelectItem>
-            <SelectItem value="security">Security</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Category Tabs */}
+      <Tabs value={categoryTab} onValueChange={setCategoryTab}>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <TabsList className="flex-wrap h-auto gap-1">
+            {dynamicCategories.map(cat => (
+              <TabsTrigger key={cat.id} value={cat.id} className="text-xs px-3 py-1.5">
+                {cat.label}
+                <span className="ml-1.5 text-[10px] font-mono opacity-70">
+                  ({cat.count})
+                </span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          {/* View Toggle + Source Filter */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-lg border border-border overflow-hidden">
+              <button
+                onClick={() => setViewType('all')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors ${
+                  viewType === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted/30 text-muted-foreground hover:bg-muted/60'
+                }`}
+              >
+                <List className="h-3.5 w-3.5" />
+                All Events
+              </button>
+              <button
+                onClick={() => setViewType('grouped')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors ${
+                  viewType === 'grouped' ? 'bg-primary text-primary-foreground' : 'bg-muted/30 text-muted-foreground hover:bg-muted/60'
+                }`}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                Grouped
+              </button>
+            </div>
+
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className="w-[140px] h-8 text-xs">
+                <SelectValue placeholder="All Sources" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sources</SelectItem>
+                <SelectItem value="backend">Backend</SelectItem>
+                <SelectItem value="desktop">Desktop</SelectItem>
+                <SelectItem value="provider">Provider</SelectItem>
+                <SelectItem value="orchestrator">Orchestrator</SelectItem>
+                <SelectItem value="security">Security</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </Tabs>
+
+      {/* Severity Distribution Tiles */}
+      {categoryFiltered.length > 0 && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-xs text-muted-foreground font-medium">Severity:</span>
+          {([
+            { key: 'P0', label: viewMode === 'operator' ? 'Critical' : 'P0', color: 'bg-red-500/15 text-red-400 border-red-500/20' },
+            { key: 'P1', label: viewMode === 'operator' ? 'High' : 'P1', color: 'bg-orange-500/15 text-orange-400 border-orange-500/20' },
+            { key: 'P2', label: viewMode === 'operator' ? 'Medium' : 'P2', color: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/20' },
+            { key: 'P3', label: viewMode === 'operator' ? 'Low' : 'P3', color: 'bg-blue-500/15 text-blue-400 border-blue-500/20' },
+          ] as const).map(sev => (
+            <span
+              key={sev.key}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium ${sev.color}`}
+            >
+              {sev.label}
+              <span className="font-mono">{severityCounts[sev.key]}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       <Panel noPadding>
         <DataTable
@@ -248,6 +361,13 @@ export default function Incidents() {
                   <p className="text-sm">{selectedIncident.provider}</p>
                 </div>
               </div>
+
+              {selectedIncident.receiptType && (
+                <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                  <p className="text-xs text-muted-foreground mb-1">Receipt Type</p>
+                  <p className="text-sm font-mono">{selectedIncident.receiptType}</p>
+                </div>
+              )}
 
               {selectedIncident.firstSeen && selectedIncident.lastSeen && (
                 <div className="p-3 rounded-lg bg-muted/50 border border-border">
