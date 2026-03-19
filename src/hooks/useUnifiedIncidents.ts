@@ -58,7 +58,9 @@ export function useUnifiedIncidents(filters?: {
           id: err.id,
           severity: err.severity,
           status: 'Open',
-          summary: err.message,
+          summary: err.message && err.message !== 'Unknown' && err.message.trim().length > 3
+            ? err.message
+            : `${err.provider || 'System'} error — ${err.severity} severity`,
           customer: '',
           provider: err.provider || 'Internal',
           createdAt: err.timestamp,

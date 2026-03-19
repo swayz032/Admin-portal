@@ -44,7 +44,8 @@ interface CategoryDef {
 export default function Incidents() {
   const { viewMode } = useSystem();
   const [viewType, setViewType] = useState<'grouped' | 'all'>('all');
-  const { data: incidents, loading: incidentsLoading, error: incidentsError, refetch: refetchIncidents } = useUnifiedIncidents({ view: viewType });
+  const filters = useMemo(() => ({ view: viewType }), [viewType]);
+  const { data: incidents, loading: incidentsLoading, error: incidentsError, refetch: refetchIncidents } = useUnifiedIncidents(filters);
   const [searchParams] = useSearchParams();
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [analysisDialog, setAnalysisDialog] = useState<Incident | null>(null);

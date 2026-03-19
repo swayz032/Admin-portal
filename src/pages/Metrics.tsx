@@ -23,6 +23,7 @@ import {
   RefreshCw,
   BarChart3,
 } from 'lucide-react';
+import { mapReceiptTypeToProvider, getProviderInfo } from '@/lib/providerRegistry';
 import { Button } from '@/components/ui/button';
 import {
   BarChart,
@@ -71,34 +72,33 @@ export default function Metrics() {
         supabase.from('receipts').select('*', { count: 'exact', head: true }),
         supabase.from('receipts').select('*', { count: 'exact', head: true }).gte('created_at', since24h),
         supabase.from('receipts').select('*', { count: 'exact', head: true }).eq('status', 'FAILED').gte('created_at', since24h),
-        supabase.from('provider_call_log').select('provider, latency_ms, status').gte('created_at', since24h),
+        supabase.from('receipts').select('receipt_type, status, created_at').gte('created_at', since24h),
       ]);
 
-      // Aggregate provider breakdown in JS
+      // Aggregate provider breakdown from receipts
       const rows = providerRows.data ?? [];
-      const providerMap = new Map<string, { calls: number; totalLatency: number; successes: number }>();
+      const providerMap = new Map<string, { calls: number; successes: number }>();
       for (const row of rows) {
-        const key = row.provider ?? 'unknown';
-        const entry = providerMap.get(key) ?? { calls: 0, totalLatency: 0, successes: 0 };
+        const providerId = mapReceiptTypeToProvider(row.receipt_type ?? '');
+        if (!providerId) continue;
+        const entry = providerMap.get(providerId) ?? { calls: 0, successes: 0 };
         entry.calls += 1;
-        entry.totalLatency += (row.latency_ms ?? 0);
-        if (row.status !== 'FAILED') entry.successes += 1;
-        providerMap.set(key, entry);
+        if (row.status !== 'FAILED' && row.status !== 'DENIED') entry.successes += 1;
+        providerMap.set(providerId, entry);
       }
 
       const providerBreakdown: OpsDashboardProviderBreakdown[] = [];
       let totalCalls = 0;
-      let totalLatencySum = 0;
       let totalSuccesses = 0;
-      for (const [provider, agg] of providerMap) {
+      for (const [providerId, agg] of providerMap) {
+        const info = getProviderInfo(providerId);
         providerBreakdown.push({
-          provider,
+          provider: info?.name ?? providerId,
           calls_24h: agg.calls,
-          avg_latency_ms: agg.calls > 0 ? agg.totalLatency / agg.calls : 0,
+          avg_latency_ms: 0, // Latency data requires provider_call_log
           success_rate: agg.calls > 0 ? (agg.successes / agg.calls) * 100 : 100,
         });
         totalCalls += agg.calls;
-        totalLatencySum += agg.totalLatency;
         totalSuccesses += agg.successes;
       }
       providerBreakdown.sort((a, b) => b.calls_24h - a.calls_24h);
@@ -109,7 +109,7 @@ export default function Metrics() {
         receipts_failed_24h: receiptsFailed24h.count ?? 0,
         provider_calls_24h: totalCalls,
         provider_success_rate: totalCalls > 0 ? (totalSuccesses / totalCalls) * 100 : 100,
-        provider_avg_latency_ms: totalCalls > 0 ? totalLatencySum / totalCalls : 0,
+        provider_avg_latency_ms: 0, // Requires provider_call_log
         provider_breakdown: providerBreakdown,
         // Fields not available from direct queries — defaults until ops facade merges
         incidents_open: 0,
@@ -211,7 +211,7 @@ export default function Metrics() {
 
   if (!metrics) return null;
 
-  const errorRate = metrics.receipts_total > 0
+  const errorRate = metrics.receipts_24h > 0
     ? ((metrics.receipts_failed_24h / metrics.receipts_24h) * 100)
     : 0;
 
@@ -279,9 +279,10 @@ export default function Metrics() {
         />
         <KPICard
           title={viewMode === 'operator' ? 'Avg Response Time' : 'Avg Provider Latency'}
-          value={`${metrics.provider_avg_latency_ms.toFixed(0)}ms`}
+          value={metrics.provider_avg_latency_ms > 0 ? `${metrics.provider_avg_latency_ms.toFixed(0)}ms` : 'N/A'}
+          subtitle={metrics.provider_avg_latency_ms === 0 ? 'Requires provider call log' : undefined}
           icon={<Clock className="h-4 w-4" />}
-          status={metrics.provider_avg_latency_ms <= 200 ? 'success' : metrics.provider_avg_latency_ms <= 500 ? 'warning' : 'critical'}
+          status={metrics.provider_avg_latency_ms === 0 ? 'info' : metrics.provider_avg_latency_ms <= 200 ? 'success' : metrics.provider_avg_latency_ms <= 500 ? 'warning' : 'critical'}
         />
       </div>
 

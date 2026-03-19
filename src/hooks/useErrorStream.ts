@@ -4,7 +4,6 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRealtimeIncidents } from './useRealtimeIncidents';
 import { useSSEStream } from './useSSEStream';
 import { getAdminToken } from '@/lib/adminAuth';
 import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
@@ -40,10 +39,7 @@ export function useErrorStream(): UseErrorStreamResult {
   const pendingRef = useRef<LiveError[]>([]);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Source 1: Supabase Realtime incidents (failed/blocked receipts)
-  const { data: incidents } = useRealtimeIncidents();
-
-  // Source 2: Backend SSE error stream
+  // Backend SSE error stream (Supabase incidents handled by useUnifiedIncidents → useRealtimeIncidents)
   const adminToken = getAdminToken();
   const { lastEvent: sseEvent } = useSSEStream<{
     id: string;
@@ -92,21 +88,6 @@ export function useErrorStream(): UseErrorStreamResult {
       }, RATE_LIMIT_MS - timeSinceLast);
     }
   }, [flushPending]);
-
-  // Map Supabase incidents to LiveErrors
-  useEffect(() => {
-    for (const incident of incidents) {
-      addError({
-        id: incident.id,
-        severity: incident.severity,
-        source: 'frontend',
-        message: incident.summary,
-        timestamp: incident.createdAt,
-        correlationId: incident.correlationId,
-        provider: incident.provider,
-      });
-    }
-  }, [incidents, addError]);
 
   // Map SSE events to LiveErrors
   useEffect(() => {
