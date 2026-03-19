@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Session } from '@supabase/supabase-js';
 import { devLog, devWarn, devError } from '@/lib/devLog';
@@ -51,7 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [mfaRequired, setMfaRequired] = useState(false);
-  const [lastActivity, setLastActivity] = useState<number>(Date.now());
+  // Use ref for activity tracking — avoids re-rendering entire tree on every mouse move
+  const lastActivityRef = useRef<number>(Date.now());
 
   // Ref to track when tab was hidden (survives re-renders without triggering them)
   const tabHiddenAtRef = useRef<number | null>(null);
@@ -182,7 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               return { error: { message: verifyError.message || 'Session creation failed' } };
             }
             // Reset activity timestamp on successful login
-            setLastActivity(Date.now());
+            lastActivityRef.current = Date.now();
             return { error: null };
           }
 
@@ -195,7 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (setError) {
               return { error: { message: setError.message } };
             }
-            setLastActivity(Date.now());
+            lastActivityRef.current = Date.now();
             return { error: null };
           }
 
@@ -204,7 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: { message: error.message } };
       }
       // Reset activity timestamp on successful login
-      setLastActivity(Date.now());
+      lastActivityRef.current = Date.now();
       return { error: null };
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred.';
@@ -245,7 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // --- User Activity Tracking ---
   useEffect(() => {
-    const updateActivity = () => setLastActivity(Date.now());
+    const updateActivity = () => lastActivityRef.current = Date.now();
 
     for (const event of ACTIVITY_EVENTS) {
       window.addEventListener(event, updateActivity, { passive: true });
@@ -263,14 +264,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!session) return;
 
     const interval = setInterval(() => {
-      if (Date.now() - lastActivity > INACTIVITY_TIMEOUT_MS) {
+      if (Date.now() - lastActivityRef.current > INACTIVITY_TIMEOUT_MS) {
         devWarn('Inactivity timeout reached. Logging out.');
         signOutRef.current();
       }
     }, INACTIVITY_CHECK_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [session, lastActivity]);
+  }, [session]);
 
   // --- Session Validity Heartbeat (verify session every 5 min) ---
   useEffect(() => {
@@ -307,21 +308,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
+  const value = useMemo(() => ({
+    user,
+    session,
+    sessionInfo,
+    loading,
+    signIn,
+    signOut,
+    forceLogout,
+    refreshSession,
+    mfaRequired,
+    lastActivity: lastActivityRef.current,
+  }), [user, session, sessionInfo, loading, signIn, signOut, forceLogout, refreshSession, mfaRequired]);
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        session,
-        sessionInfo,
-        loading,
-        signIn,
-        signOut,
-        forceLogout,
-        refreshSession,
-        mfaRequired,
-        lastActivity,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

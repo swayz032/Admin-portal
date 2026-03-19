@@ -7,14 +7,13 @@ import { DataTable } from '@/components/shared/DataTable';
 import { StatusChip } from '@/components/shared/StatusChip';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import type { Provider } from '@/data/seed';
-import { useProviderRotationSummary, useProviders } from '@/hooks/useAdminData';
+import { useProviderRotationSummary } from '@/hooks/useAdminData';
+import { useRealProviders, type RealProvider } from '@/hooks/useRealProviders';
 import { PageLoadingState } from '@/components/shared/PageLoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { formatTimeAgo, formatLatency } from '@/lib/formatters';
-import { Plug, Settings, RefreshCw, Unlink, ChevronRight, CheckCircle, Shield, Zap, AlertTriangle } from 'lucide-react';
+import { formatTimeAgo } from '@/lib/formatters';
+import { Plug, Settings, RefreshCw, CheckCircle, Shield, Zap, AlertTriangle } from 'lucide-react';
 import { useSystem } from '@/contexts/SystemContext';
 import { ModeText } from '@/components/shared/ModeText';
 import { ProviderHealthGrid } from '@/components/admin-ava/ProviderHealthGrid';
@@ -32,11 +31,11 @@ type PendingApprovalRequest = {
 
 export default function ConnectedApps() {
   const { viewMode, systemState } = useSystem();
-  const { data: providers, loading: providersLoading, error: providersError, refetch: refetchProviders } = useProviders();
+  const { providers, loading: providersLoading, error: providersError, refetch: refetchProviders } = useRealProviders();
   const { data: rotationSummary } = useProviderRotationSummary();
-  const { providers: liveProviders, isConnected: streamConnected, hasIssues: liveHasIssues } = useProviderHealthStream();
-  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
-  const [actionDialog, setActionDialog] = useState<{ provider: Provider; action: 'scope' | 'rotate' | 'disconnect' } | null>(null);
+  const { providers: liveProviders, isConnected: streamConnected } = useProviderHealthStream();
+  const [selectedProvider, setSelectedProvider] = useState<RealProvider | null>(null);
+  const [actionDialog, setActionDialog] = useState<{ provider: RealProvider; action: 'scope' | 'rotate' | 'disconnect' } | null>(null);
   const [createdApprovalRequests, setCreatedApprovalRequests] = useState<PendingApprovalRequest[]>([]);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
@@ -45,42 +44,42 @@ export default function ConnectedApps() {
   if (providersLoading) return <PageLoadingState showKPIs rows={5} />;
   if (providersError) return <EmptyState variant="error" title="Failed to load connected apps" description={providersError} actionLabel="Retry" onAction={refetchProviders} />;
 
-  const providerList = Array.isArray(providers) ? providers : [];
+  const providerList = providers;
 
   // Stats
-  const healthyProviders = providerList.filter(p => p.status === 'Healthy').length;
-  const atRiskProviders = providerList.filter(p => p.status === 'At Risk').length;
-  const avgLatency = providerList.length > 0
-    ? Math.round(providerList.reduce((sum, p) => sum + p.p95Latency, 0) / providerList.length)
-    : 0;
+  const activeProviders = providerList.filter(p => p.totalReceipts24h > 0).length;
+  const connectedProviders = providerList.filter(p => p.status === 'connected').length;
+  const degradedProviders = providerList.filter(p => p.status === 'degraded').length;
+  const avgSuccessRate = providerList.length > 0
+    ? Math.round(providerList.filter(p => p.totalReceipts24h > 0).reduce((sum, p) => sum + p.successRate, 0) / Math.max(activeProviders, 1))
+    : 100;
 
   const quickStats = [
-    { label: 'connected', value: providerList.length, status: 'success' as const },
-    { label: 'healthy', value: healthyProviders, status: 'success' as const },
-    { label: 'slow', value: atRiskProviders, status: atRiskProviders > 0 ? 'warning' as const : 'success' as const },
-    { label: 'avg latency', value: `${avgLatency}ms` },
+    { label: 'total integrations', value: providerList.length, status: 'success' as const },
+    { label: 'active (24h)', value: activeProviders, status: 'success' as const },
+    { label: 'healthy', value: connectedProviders, status: 'success' as const },
+    { label: 'degraded', value: degradedProviders, status: degradedProviders > 0 ? 'warning' as const : 'success' as const },
+    { label: 'avg success rate', value: `${avgSuccessRate}%` },
     ...(rotationSummary ? [{ label: 'auto-rotated', value: rotationSummary.automated_count }] : []),
     ...(rotationSummary?.manual_alerted_with_adapter_modules?.length
       ? [{ label: 'adapter-ready', value: rotationSummary.manual_alerted_with_adapter_modules.length }]
       : []),
   ];
 
-  const getStatusType = (status: Provider['status']) => {
+  const getStatusType = (status: RealProvider['status']) => {
     switch (status) {
-      case 'Healthy': return 'success';
-      case 'At Risk': return 'warning';
-      case 'Writes Paused': return 'pending';
-      case 'Read-only Allowed': return 'neutral';
+      case 'connected': return 'success';
+      case 'degraded': return 'warning';
+      case 'disconnected': return 'critical';
       default: return 'neutral';
     }
   };
 
-  const getOperatorStatus = (status: Provider['status']) => {
+  const getOperatorStatus = (status: RealProvider['status']) => {
     switch (status) {
-      case 'Healthy': return 'Connected';
-      case 'At Risk': return 'Slow';
-      case 'Writes Paused': return 'Limited';
-      case 'Read-only Allowed': return 'Read Only';
+      case 'connected': return 'Healthy';
+      case 'degraded': return 'Slow';
+      case 'disconnected': return 'Inactive';
       default: return status;
     }
   };
@@ -104,53 +103,63 @@ export default function ConnectedApps() {
   };
 
   const columns = viewMode === 'operator' ? [
-    { 
-      key: 'name', 
-      header: 'Service', 
-      render: (p: Provider) => (
+    {
+      key: 'name',
+      header: 'Service',
+      render: (p: RealProvider) => (
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
             <Plug className="h-4 w-4 text-primary" />
           </div>
-          <span className="font-medium">{p.name}</span>
+          <div>
+            <span className="font-medium">{p.name}</span>
+            <span className="ml-2 text-xs text-muted-foreground">{p.category}</span>
+          </div>
         </div>
-      ) 
+      )
     },
-    { 
-      key: 'status', 
-      header: 'Status', 
-      render: (p: Provider) => <StatusChip status={getStatusType(p.status)} label={getOperatorStatus(p.status)} /> 
+    {
+      key: 'status',
+      header: 'Status',
+      render: (p: RealProvider) => <StatusChip status={getStatusType(p.status)} label={getOperatorStatus(p.status)} />
     },
-    { key: 'lastSyncTime', header: 'Last Active', render: (p: Provider) => <span className="text-muted-foreground">{formatTimeAgo(p.lastSyncTime)}</span> },
+    { key: 'lastActivity', header: 'Last Active', render: (p: RealProvider) => <span className="text-muted-foreground">{p.lastActivity ? formatTimeAgo(p.lastActivity) : 'No activity'}</span> },
   ] : [
-    { 
-      key: 'name', 
-      header: 'Provider', 
-      render: (p: Provider) => (
+    {
+      key: 'name',
+      header: 'Provider',
+      render: (p: RealProvider) => (
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
             <Plug className="h-4 w-4 text-primary" />
           </div>
-          <span className="font-medium">{p.name}</span>
+          <div>
+            <span className="font-medium">{p.name}</span>
+            <span className="ml-2 text-xs text-muted-foreground">{p.category}</span>
+          </div>
         </div>
-      ) 
+      )
     },
-    { 
-      key: 'status', 
-      header: 'Status', 
-      render: (p: Provider) => <StatusChip status={getStatusType(p.status)} label={p.status} /> 
+    {
+      key: 'status',
+      header: 'Status',
+      render: (p: RealProvider) => <StatusChip status={getStatusType(p.status)} label={getOperatorStatus(p.status)} />
     },
-    { key: 'permissionsSummary', header: 'Permissions', className: 'max-w-xs truncate' },
-    { key: 'lastSyncTime', header: 'Last Sync', render: (p: Provider) => <span className="text-muted-foreground">{formatTimeAgo(p.lastSyncTime)}</span> },
-    { 
-      key: 'p95Latency', 
-      header: 'p95 Latency', 
-      render: (p: Provider) => (
-        <span className={p.p95Latency > 300 ? 'text-warning' : 'text-muted-foreground'}>
-          {formatLatency(p.p95Latency)}
+    {
+      key: 'successRate',
+      header: 'Success Rate',
+      render: (p: RealProvider) => (
+        <span className={p.successRate < 90 ? 'text-destructive' : p.successRate < 99 ? 'text-warning' : 'text-muted-foreground'}>
+          {p.totalReceipts24h > 0 ? `${p.successRate.toFixed(1)}%` : '—'}
         </span>
-      ) 
+      )
     },
+    {
+      key: 'totalReceipts24h',
+      header: 'Receipts (24h)',
+      render: (p: RealProvider) => <span className="text-muted-foreground font-mono">{p.totalReceipts24h}</span>
+    },
+    { key: 'lastActivity', header: 'Last Activity', render: (p: RealProvider) => <span className="text-muted-foreground">{p.lastActivity ? formatTimeAgo(p.lastActivity) : 'No activity'}</span> },
   ];
 
   return (
@@ -166,21 +175,25 @@ export default function ConnectedApps() {
         
         {/* Hero Section */}
         <PageHero
-          title={viewMode === 'operator' 
-            ? `All ${providerList.length} services connected and healthy`
-            : `${providerList.length} providers connected`}
-          subtitle={viewMode === 'operator' 
-            ? "View and manage your connected third-party services" 
+          title={viewMode === 'operator'
+            ? `${providerList.length} provider integrations`
+            : `${providerList.length} provider integrations — ${activeProviders} active`}
+          subtitle={viewMode === 'operator'
+            ? "View and manage your connected third-party services"
             : "Manage provider integrations and connection health"}
           icon={<Plug className="h-6 w-6" />}
-          status={atRiskProviders === 0 
+          status={degradedProviders === 0
             ? { type: 'success', label: 'All healthy' }
-            : { type: 'warning', label: `${atRiskProviders} slow` }}
+            : { type: 'warning', label: `${degradedProviders} degraded` }}
         />
 
-        {/* Live Provider Health (SSE) */}
-        <Panel title="Live Provider Health" noPadding={false}>
-          <ProviderHealthGrid liveProviders={streamConnected ? liveProviders : undefined} />
+        {/* Provider Health (receipt-derived, with SSE fallback) */}
+        <Panel title="Provider Health" noPadding={false}>
+          <ProviderHealthGrid
+            realProviders={providers.length > 0 ? providers : undefined}
+            liveProviders={streamConnected ? liveProviders : undefined}
+            sourceLabel="Health derived from receipt data"
+          />
         </Panel>
 
         {/* Quick Stats */}
@@ -189,19 +202,19 @@ export default function ConnectedApps() {
         {/* Story Insights */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <InsightPanel
-            headline={healthyProviders === providerList.length ? "All services healthy" : `${healthyProviders} of ${providerList.length} healthy`}
-            subtext={atRiskProviders > 0 ? `${atRiskProviders} running slow` : "No connection issues"}
-            trend={atRiskProviders === 0 ? 'positive' : 'neutral'}
+            headline={connectedProviders === activeProviders ? "All active providers healthy" : `${connectedProviders} of ${activeProviders} active providers healthy`}
+            subtext={degradedProviders > 0 ? `${degradedProviders} running degraded` : "No connection issues"}
+            trend={degradedProviders === 0 ? 'positive' : 'neutral'}
             icon={<CheckCircle className="h-5 w-5" />}
           />
           <InsightPanel
             headline={(() => {
-              const top = [...providerList].sort((a, b) => (b.recentReceiptsCount ?? 0) - (a.recentReceiptsCount ?? 0))[0];
-              return top ? `${top.name} most active` : 'No activity yet';
+              const top = [...providerList].sort((a, b) => b.totalReceipts24h - a.totalReceipts24h)[0];
+              return top && top.totalReceipts24h > 0 ? `${top.name} most active` : 'No activity yet';
             })()}
             subtext={(() => {
-              const top = [...providerList].sort((a, b) => (b.recentReceiptsCount ?? 0) - (a.recentReceiptsCount ?? 0))[0];
-              return top ? `${top.recentReceiptsCount ?? 0} actions this week` : 'No provider data';
+              const top = [...providerList].sort((a, b) => b.totalReceipts24h - a.totalReceipts24h)[0];
+              return top && top.totalReceipts24h > 0 ? `${top.totalReceipts24h} receipts in last 24h` : 'No provider data';
             })()}
             trend="positive"
             icon={<Zap className="h-5 w-5" />}
@@ -209,9 +222,9 @@ export default function ConnectedApps() {
             linkLabel="View activity"
           />
           <InsightPanel
-            headline={`Average latency: ${avgLatency}ms`}
-            subtext={avgLatency < 200 ? "Within normal range" : "Slightly elevated"}
-            trend={avgLatency < 200 ? 'positive' : 'neutral'}
+            headline={`Average success rate: ${avgSuccessRate}%`}
+            subtext={avgSuccessRate >= 99 ? "Excellent reliability" : avgSuccessRate >= 90 ? "Within normal range" : "Below target"}
+            trend={avgSuccessRate >= 90 ? 'positive' : 'neutral'}
             icon={<Plug className="h-5 w-5" />}
           />
           {rotationSummary && (
@@ -229,7 +242,7 @@ export default function ConnectedApps() {
           <DataTable
             columns={columns}
             data={providerList}
-            keyExtractor={(p: Provider) => p.id}
+            keyExtractor={(p: RealProvider) => p.id}
             onRowClick={(p) => setSelectedProvider(p)}
           />
         </Panel>
@@ -291,75 +304,36 @@ export default function ConnectedApps() {
             {selectedProvider && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <StatusChip 
-                    status={getStatusType(selectedProvider.status)} 
-                    label={viewMode === 'operator' ? getOperatorStatus(selectedProvider.status) : selectedProvider.status} 
+                  <StatusChip
+                    status={getStatusType(selectedProvider.status)}
+                    label={viewMode === 'operator' ? getOperatorStatus(selectedProvider.status) : selectedProvider.status}
                   />
+                  <span className="text-xs text-muted-foreground">{selectedProvider.category}</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                    <p className="text-xs text-muted-foreground">Last Active</p>
-                    <p className="text-sm">{formatTimeAgo(selectedProvider.lastSyncTime)}</p>
+                    <p className="text-xs text-muted-foreground">Last Activity</p>
+                    <p className="text-sm">{selectedProvider.lastActivity ? formatTimeAgo(selectedProvider.lastActivity) : 'No activity'}</p>
                   </div>
                   <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                    <p className="text-xs text-muted-foreground">Latency</p>
-                    <p className={`text-sm ${selectedProvider.p95Latency > 300 ? 'text-warning' : ''}`}>
-                      {formatLatency(selectedProvider.p95Latency)}
+                    <p className="text-xs text-muted-foreground">Success Rate</p>
+                    <p className={`text-sm ${selectedProvider.successRate < 90 ? 'text-destructive' : selectedProvider.successRate < 99 ? 'text-warning' : ''}`}>
+                      {selectedProvider.totalReceipts24h > 0 ? `${selectedProvider.successRate.toFixed(1)}%` : 'No data'}
                     </p>
                   </div>
                 </div>
 
                 {viewMode === 'engineer' && (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                        <p className="text-xs text-muted-foreground">Rotation Mode</p>
-                        <p className="text-sm">{selectedProvider.rotationMode?.replace(/_/g, ' ') || 'Not configured'}</p>
-                      </div>
-                      <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                        <p className="text-xs text-muted-foreground">Automation Status</p>
-                        <p className="text-sm">{selectedProvider.automationStatus?.replace(/_/g, ' ') || 'Not configured'}</p>
-                      </div>
-                      <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                        <p className="text-xs text-muted-foreground">Secret Source</p>
-                        <p className="text-sm">{selectedProvider.secretSource?.replace(/_/g, ' ') || 'Not configured'}</p>
-                      </div>
-                      <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                        <p className="text-xs text-muted-foreground">Verification Source</p>
-                        <p className="text-sm">{selectedProvider.verificationSource?.replace(/_/g, ' ') || 'Not configured'}</p>
-                      </div>
-                      <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                        <p className="text-xs text-muted-foreground">Adapter</p>
-                        <p className="text-sm">{selectedProvider.adapterName || selectedProvider.adapterType || 'Not configured'}</p>
-                      </div>
-                      <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                        <p className="text-xs text-muted-foreground">Secret ID</p>
-                        <p className="text-sm break-all">{selectedProvider.secretId || 'Not configured'}</p>
-                      </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                      <p className="text-xs text-muted-foreground">Receipts (24h)</p>
+                      <p className="text-sm font-mono">{selectedProvider.totalReceipts24h}</p>
                     </div>
-                    {(selectedProvider.rotationMode === 'Not configured' || selectedProvider.secretSource === 'Not configured') && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="p-3 rounded-lg bg-muted/30 border border-border/50 flex items-center gap-2 cursor-help">
-                            <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
-                            <p className="text-xs text-muted-foreground">
-                              Some fields show "Not configured" — connect AWS Secrets Manager to see rotation data
-                            </p>
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="max-w-xs">
-                          <p>Rotation mode, automation status, and secret source are populated from AWS Secrets Manager via the backend ops facade. Ensure the backend has AWS SM credentials configured and the /admin/ops/providers endpoint is returning rotation data.</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                  </div>
-                )}
-
-                {viewMode === 'engineer' && (
-                  <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                    <p className="text-xs text-muted-foreground mb-1">Permissions</p>
-                    <p className="text-sm">{selectedProvider.permissionsSummary}</p>
+                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                      <p className="text-xs text-muted-foreground">Failed (24h)</p>
+                      <p className={`text-sm font-mono ${selectedProvider.failedReceipts24h > 0 ? 'text-destructive' : ''}`}>{selectedProvider.failedReceipts24h}</p>
+                    </div>
                   </div>
                 )}
 

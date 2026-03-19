@@ -16,6 +16,8 @@ interface CopyableIdProps {
 }
 
 export function CopyableId({ fullId, displayId, isCopied, onCopy, linkTo }: CopyableIdProps) {
+  const safeFullId = fullId || '';
+  const safeDisplayId = displayId || '—';
   if (linkTo) {
     return (
       <Tooltip>
@@ -25,12 +27,12 @@ export function CopyableId({ fullId, displayId, isCopied, onCopy, linkTo }: Copy
             onClick={(e) => e.stopPropagation()}
             className="font-mono text-xs font-bold text-primary hover:underline flex items-center gap-1"
           >
-            {displayId}
+            {safeDisplayId}
             <ExternalLink className="h-3 w-3" />
           </Link>
         </TooltipTrigger>
         <TooltipContent side="right">
-          <span className="font-mono text-xs">{fullId}</span>
+          <span className="font-mono text-xs">{safeFullId}</span>
         </TooltipContent>
       </Tooltip>
     );
@@ -40,14 +42,14 @@ export function CopyableId({ fullId, displayId, isCopied, onCopy, linkTo }: Copy
     <Tooltip>
       <TooltipTrigger asChild>
         <button
-          onClick={(e) => { e.stopPropagation(); onCopy(fullId); }}
+          onClick={(e) => { e.stopPropagation(); onCopy(safeFullId); }}
           className="font-mono text-sm font-bold text-primary hover:underline cursor-pointer"
         >
-          {displayId}
+          {safeDisplayId}
         </button>
       </TooltipTrigger>
       <TooltipContent side="right" className="flex items-center gap-2">
-        <span className="font-mono text-xs">{fullId}</span>
+        <span className="font-mono text-xs">{safeFullId}</span>
         {isCopied ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
       </TooltipContent>
     </Tooltip>

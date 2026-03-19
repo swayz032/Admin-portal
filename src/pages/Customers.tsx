@@ -192,7 +192,7 @@ export default function Customers() {
       header: 'Suite',
       render: (c: Customer) => (
         <span className="font-mono text-xs">
-          {c.displayId ? `STE-${c.displayId}` : c.id.slice(0, 8)}
+          {c.displayId ? `STE-${c.displayId}` : (c.id ?? '').slice(0, 8) || '—'}
         </span>
       ),
     },

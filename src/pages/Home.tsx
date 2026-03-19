@@ -43,8 +43,9 @@ export default function Home() {
   const businessMetrics = rawBusinessMetrics ?? defaultBusinessMetrics;
   const runwayBurnData = rawRunwayBurn ?? defaultRunwayBurn;
 
-  // Fetch real receipt counts for task metrics
+  // Fetch real receipt counts for task metrics + failed count
   const [receiptStats, setReceiptStats] = useState({ thisWeek: 0, lastWeek: 0 });
+  const [failedReceipts24h, setFailedReceipts24h] = useState(0);
   useEffect(() => {
     async function fetchReceiptStats() {
       const now = new Date();
@@ -53,14 +54,16 @@ export default function Home() {
       const prevWeekStart = new Date(weekStart);
       prevWeekStart.setDate(prevWeekStart.getDate() - 7);
 
-      const [thisWeekRes, lastWeekRes] = await Promise.all([
+      const [thisWeekRes, lastWeekRes, failed24hRes] = await Promise.all([
         supabase.from('receipts').select('*', { count: 'exact', head: true }).gte('created_at', weekStart.toISOString()),
         supabase.from('receipts').select('*', { count: 'exact', head: true }).gte('created_at', prevWeekStart.toISOString()).lt('created_at', weekStart.toISOString()),
+        supabase.from('receipts').select('*', { count: 'exact', head: true }).in('status', ['FAILED', 'DENIED']).gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
       ]);
       setReceiptStats({
         thisWeek: thisWeekRes.count ?? 0,
         lastWeek: lastWeekRes.count ?? 0,
       });
+      setFailedReceipts24h(failed24hRes.count ?? 0);
     }
     fetchReceiptStats();
   }, []);
@@ -78,15 +81,16 @@ export default function Home() {
   const mrrSparkline = mrrTrend.length > 0 ? mrrTrend.map(t => t.mrr) : [totalMRR];
   const runwaySparkline = [runwayBurnData.runway];
   
-  // Determine health status
-  const healthStatus = openIncidents === 0 && pendingApprovals < 3 
-    ? 'All systems healthy' 
-    : openIncidents > 0 
-      ? `${openIncidents} issue${openIncidents > 1 ? 's' : ''} need attention`
+  // Determine health status — use the higher of openIncidents and failedReceipts24h
+  const healthValue = Math.max(openIncidents, failedReceipts24h);
+  const healthStatus = healthValue === 0 && pendingApprovals < 3
+    ? 'All systems healthy'
+    : healthValue > 0
+      ? `${healthValue} issue${healthValue > 1 ? 's' : ''} need attention`
       : `${pendingApprovals} pending approvals`;
 
-  const healthCardStatus: 'success' | 'warning' | 'critical' = 
-    openIncidents === 0 ? 'success' : openIncidents <= 2 ? 'warning' : 'critical';
+  const healthCardStatus: 'success' | 'warning' | 'critical' =
+    healthValue === 0 ? 'success' : healthValue <= 2 ? 'warning' : 'critical';
 
   // Build priority actions from real data
   const priorityActions: PriorityAction[] = [
@@ -103,6 +107,7 @@ export default function Home() {
       })),
     ...incidents
       .filter(i => i.status === 'Open')
+      .filter(i => i.summary && i.summary !== 'Unknown' && i.summary.trim().length > 3)
       .map(i => ({
         id: i.id,
         title: i.summary,
@@ -183,9 +188,9 @@ export default function Home() {
           title="System Health"
           value={healthStatus}
           trend={
-            openIncidents === 0
+            healthValue === 0
               ? { direction: 'up', value: 'All good' }
-              : { direction: 'down', value: `${openIncidents} issues` }
+              : { direction: 'down', value: `${failedReceipts24h} failures in last 24h` }
           }
           icon={<Shield className="h-5 w-5" />}
           status={healthCardStatus}

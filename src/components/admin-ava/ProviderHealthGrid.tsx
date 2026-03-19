@@ -4,6 +4,7 @@
  */
 
 import { useProviderHealthStream, type ProviderHealth, type ProviderStatus } from '@/hooks/useProviderHealthStream';
+import type { RealProvider } from '@/hooks/useRealProviders';
 import { cn } from '@/lib/utils';
 import { formatTimeAgo } from '@/lib/formatters';
 import { Wifi, WifiOff, AlertTriangle, Clock, Activity } from 'lucide-react';
@@ -13,6 +14,17 @@ const statusConfig: Record<ProviderStatus, { label: string; color: string; bg: s
   degraded: { label: 'Degraded', color: 'text-amber-400', bg: 'bg-amber-500/5 border-amber-500/20', dot: 'bg-amber-500' },
   disconnected: { label: 'Disconnected', color: 'text-red-400', bg: 'bg-red-500/5 border-red-500/20', dot: 'bg-red-500' },
 };
+
+function toProviderHealth(rp: RealProvider): ProviderHealth {
+  return {
+    provider: rp.name,
+    status: rp.status,
+    latencyMs: 0,
+    errorRate: rp.totalReceipts24h > 0 ? rp.failedReceipts24h / rp.totalReceipts24h : 0,
+    lane: rp.category,
+    lastChecked: rp.lastActivity ?? new Date().toISOString(),
+  };
+}
 
 function ProviderCard({ provider }: { provider: ProviderHealth }) {
   const config = statusConfig[provider.status];
@@ -28,10 +40,12 @@ function ProviderCard({ provider }: { provider: ProviderHealth }) {
       </div>
 
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1" title="Latency">
-          <Clock className="w-3 h-3" />
-          {provider.latencyMs}ms
-        </div>
+        {provider.latencyMs > 0 && (
+          <div className="flex items-center gap-1" title="Latency">
+            <Clock className="w-3 h-3" />
+            {provider.latencyMs}ms
+          </div>
+        )}
         <div className="flex items-center gap-1" title="Error rate">
           <Activity className="w-3 h-3" />
           {(provider.errorRate * 100).toFixed(1)}%
@@ -48,8 +62,21 @@ function ProviderCard({ provider }: { provider: ProviderHealth }) {
   );
 }
 
-export function ProviderHealthGrid() {
-  const { providers, hasIssues, isConnected, degradedCount, disconnectedCount } = useProviderHealthStream();
+interface ProviderHealthGridProps {
+  liveProviders?: ProviderHealth[];
+  realProviders?: RealProvider[];
+  sourceLabel?: string;
+}
+
+export function ProviderHealthGrid({ liveProviders, realProviders, sourceLabel }: ProviderHealthGridProps) {
+  const stream = useProviderHealthStream();
+  const providers = realProviders
+    ? realProviders.map(toProviderHealth)
+    : liveProviders ?? stream.providers;
+  const isConnected = (liveProviders || realProviders) ? true : stream.isConnected;
+  const degradedCount = providers.filter(p => p.status === 'degraded').length;
+  const disconnectedCount = providers.filter(p => p.status === 'disconnected').length;
+  const hasIssues = degradedCount > 0 || disconnectedCount > 0;
 
   return (
     <div className="space-y-3">

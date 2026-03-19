@@ -3,7 +3,7 @@
  *
  * Uses fetchIncidents() which aggregates receipts by category (idempotent).
  * Subscribes to receipts table for live refresh on new failures.
- * n8n receipts excluded — they go to /n8n-operations.
+ * All failures (including n8n) trigger refresh.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -59,13 +59,9 @@ export function useRealtimeIncidents(filters?: IncidentFilters) {
           event: 'INSERT',
           schema: 'public',
           table: 'receipts',
-          filter: 'status=in.(FAILED,BLOCKED,DENIED)',
+          filter: 'status=in.(FAILED,DENIED)',
         },
-        (payload) => {
-          // Skip n8n receipts
-          const receiptType = ((payload.new as Record<string, unknown>)?.receipt_type as string) ?? '';
-          if (receiptType.startsWith('n8n_')) return;
-
+        (_payload) => {
           // Debounce: batch rapid inserts into 1 refetch
           clearTimeout(debounceTimer);
           debounceTimer = setTimeout(() => load(), 2000);

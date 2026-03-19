@@ -234,7 +234,7 @@ export default function ClientEvents() {
       key: 'id',
       header: 'Event ID',
       render: (e: ClientEvent) => (
-        <span className="font-mono text-xs text-muted-foreground">{e.id.slice(0, 12)}...</span>
+        <span className="font-mono text-xs text-muted-foreground">{(e.id ?? '').slice(0, 12) || '—'}...</span>
       ),
     },
     {
@@ -268,7 +268,7 @@ export default function ClientEvents() {
           className="font-mono text-xs text-primary hover:underline"
           onClick={(ev) => ev.stopPropagation()}
         >
-          {e.correlation_id.slice(0, 12)}...
+          {(e.correlation_id ?? '').slice(0, 12) || '—'}...
         </Link>
       ) : (
         <span className="text-xs text-muted-foreground">-</span>
