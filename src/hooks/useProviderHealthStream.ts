@@ -28,6 +28,10 @@ interface UseProviderHealthStreamResult {
   isConnected: boolean;
 }
 
+// SSE backend endpoint does not exist yet — disable stream to prevent retry storms.
+// When the backend SSE endpoint is built, set this to true to enable live provider health.
+const SSE_BACKEND_AVAILABLE = false;
+
 export function useProviderHealthStream(): UseProviderHealthStreamResult {
   const [providers, setProviders] = useState<ProviderHealth[]>([]);
 
@@ -35,7 +39,7 @@ export function useProviderHealthStream(): UseProviderHealthStreamResult {
   const { lastEvent, status } = useSSEStream<ProviderHealth[] | ProviderHealth | { items: ProviderHealth[] }>({
     url: buildOpsFacadeUrl('/admin/ops/providers/stream'),
     headers: buildOpsHeaders({ includeJson: false, includeSuiteId: true }),
-    enabled: !!adminToken,
+    enabled: SSE_BACKEND_AVAILABLE && !!adminToken,
   });
 
   useEffect(() => {

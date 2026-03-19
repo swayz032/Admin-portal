@@ -32,6 +32,10 @@ interface UseErrorStreamResult {
 const MAX_ERRORS = 200;
 const RATE_LIMIT_MS = 1_000; // Max 1 UI update per second
 
+// SSE backend endpoint does not exist yet — disable stream to prevent retry storms.
+// When the backend SSE endpoint is built, set this to true to enable live error streaming.
+const SSE_BACKEND_AVAILABLE = false;
+
 export function useErrorStream(): UseErrorStreamResult {
   const [errors, setErrors] = useState<LiveError[]>([]);
   const [hasNewErrors, setHasNewErrors] = useState(false);
@@ -52,7 +56,7 @@ export function useErrorStream(): UseErrorStreamResult {
   }>({
     url: buildOpsFacadeUrl('/admin/ops/incidents/stream'),
     headers: buildOpsHeaders({ includeJson: false, includeSuiteId: true }),
-    enabled: !!adminToken,
+    enabled: SSE_BACKEND_AVAILABLE && !!adminToken,
   });
 
   // Rate-limited error addition

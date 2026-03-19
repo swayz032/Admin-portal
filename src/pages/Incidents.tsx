@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useState, useMemo, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { PageHero } from '@/components/shared/PageHero';
 import { QuickStats } from '@/components/shared/QuickStats';
 import { WhatToDoSection, ActionItem } from '@/components/shared/WhatToDoSection';
@@ -46,7 +46,6 @@ export default function Incidents() {
   const [viewType, setViewType] = useState<'grouped' | 'all'>('all');
   const filters = useMemo(() => ({ view: viewType }), [viewType]);
   const { data: incidents, loading: incidentsLoading, error: incidentsError, refetch: refetchIncidents } = useUnifiedIncidents(filters);
-  const [searchParams] = useSearchParams();
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [analysisDialog, setAnalysisDialog] = useState<Incident | null>(null);
   const [sourceFilter, setSourceFilter] = useState<string>('all');
@@ -76,30 +75,32 @@ export default function Incidents() {
     ];
   }, [incidents]);
 
+  // Memoize all derived data to prevent render-body recomputation cascades
+  const categoryDef = useMemo(
+    () => dynamicCategories.find(c => c.id === categoryTab) ?? dynamicCategories[0],
+    [dynamicCategories, categoryTab],
+  );
+  const categoryFiltered = useMemo(
+    () => incidents.filter(categoryDef.filter),
+    [incidents, categoryDef],
+  );
+  const severityCounts = useMemo(() => ({
+    P0: categoryFiltered.filter(i => i.severity === 'P0').length,
+    P1: categoryFiltered.filter(i => i.severity === 'P1').length,
+    P2: categoryFiltered.filter(i => i.severity === 'P2').length,
+    P3: categoryFiltered.filter(i => i.severity === 'P3').length,
+  }), [categoryFiltered]);
+  const sourceFiltered = useMemo(
+    () => sourceFilter === 'all'
+      ? categoryFiltered
+      : categoryFiltered.filter(i => deriveSourceCategory(i.receiptType ?? '') === sourceFilter),
+    [categoryFiltered, sourceFilter],
+  );
+  const openIncidents = useMemo(() => sourceFiltered.filter(i => i.status === 'Open'), [sourceFiltered]);
+  const resolvedIncidents = useMemo(() => sourceFiltered.filter(i => i.status === 'Resolved'), [sourceFiltered]);
+
   if (incidentsLoading) return <PageLoadingState showKPIs rows={5} />;
   if (incidentsError) return <EmptyState variant="error" title="Failed to load incidents" description={incidentsError} actionLabel="Retry" onAction={refetchIncidents} />;
-
-  // Apply category filter
-  const categoryDef = dynamicCategories.find(c => c.id === categoryTab) ?? dynamicCategories[0];
-  const categoryFiltered = incidents.filter(categoryDef.filter);
-
-  // Severity distribution for the active category
-  const severityCounts = useMemo(() => {
-    return {
-      P0: categoryFiltered.filter(i => i.severity === 'P0').length,
-      P1: categoryFiltered.filter(i => i.severity === 'P1').length,
-      P2: categoryFiltered.filter(i => i.severity === 'P2').length,
-      P3: categoryFiltered.filter(i => i.severity === 'P3').length,
-    };
-  }, [categoryFiltered]);
-
-  // Apply source filter
-  const sourceFiltered = sourceFilter === 'all'
-    ? categoryFiltered
-    : categoryFiltered.filter(i => deriveSourceCategory(i.receiptType ?? '') === sourceFilter);
-
-  const openIncidents = sourceFiltered.filter(i => i.status === 'Open');
-  const resolvedIncidents = sourceFiltered.filter(i => i.status === 'Resolved');
 
   // Build priority actions from open incidents
   const priorityActions: ActionItem[] = openIncidents.slice(0, 10).map(i => ({

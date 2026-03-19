@@ -18,12 +18,15 @@ export interface HealthPulse {
   timestamp: string;
 }
 
+// SSE backend endpoint does not exist yet — disable stream to prevent retry storms.
+const SSE_BACKEND_AVAILABLE = false;
+
 export function useHealthPulseStream() {
   const adminToken = getAdminToken();
   const { lastEvent, status, error, reconnect, disconnect } = useSSEStream<HealthPulse>({
     url: buildOpsFacadeUrl('/admin/ops/health-pulse/stream'),
     headers: buildOpsHeaders({ includeJson: false, includeSuiteId: true }),
-    enabled: !!adminToken,
+    enabled: SSE_BACKEND_AVAILABLE && !!adminToken,
   });
 
   return {

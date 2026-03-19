@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 
 export type ViewMode = 'operator' | 'engineer';
 type AutonomyLevel = 'Limited' | 'Standard' | 'Emergency Stop';
@@ -38,23 +38,27 @@ export function SystemProvider({ children }: { children: ReactNode }) {
   });
 
   // Persist viewMode changes to localStorage
-  const setViewMode = (mode: ViewMode) => {
+  const setViewMode = useCallback((mode: ViewMode) => {
     setViewModeState(mode);
     if (typeof window !== 'undefined') {
       localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
     }
-  };
+  }, []);
 
-  const toggleSafetyMode = () => {
+  const toggleSafetyMode = useCallback(() => {
     setSystemState(prev => ({ ...prev, safetyMode: !prev.safetyMode }));
-  };
+  }, []);
 
-  const setAutonomyLevel = (level: AutonomyLevel) => {
+  const setAutonomyLevel = useCallback((level: AutonomyLevel) => {
     setSystemState(prev => ({ ...prev, autonomyLevel: level }));
-  };
+  }, []);
+
+  const value = useMemo(() => ({
+    viewMode, setViewMode, systemState, toggleSafetyMode, setAutonomyLevel,
+  }), [viewMode, setViewMode, systemState, toggleSafetyMode, setAutonomyLevel]);
 
   return (
-    <SystemContext.Provider value={{ viewMode, setViewMode, systemState, toggleSafetyMode, setAutonomyLevel }}>
+    <SystemContext.Provider value={value}>
       {children}
     </SystemContext.Provider>
   );

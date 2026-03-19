@@ -72,6 +72,7 @@ export function useSSEStream<T = unknown>({
   const backoffRef = useRef(INITIAL_BACKOFF_MS);
   const retryCountRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectingRef = useRef(false); // Guard against concurrent connect() calls
   // Refs to avoid re-creating connect() on every render when callers pass inline objects
   const headersRef = useRef(headers);
   headersRef.current = headers;
@@ -91,6 +92,8 @@ export function useSSEStream<T = unknown>({
 
   const connect = useCallback(async () => {
     if (!mountedRef.current || !enabled) return;
+    if (connectingRef.current) return; // Prevent re-entrant calls
+    connectingRef.current = true;
 
     // Abort previous connection
     abortRef.current?.abort();
@@ -181,6 +184,7 @@ export function useSSEStream<T = unknown>({
         }
       }
     } catch (err) {
+      connectingRef.current = false;
       if ((err as Error).name === 'AbortError') {
         // Could be intentional disconnect or connection timeout
         if (mountedRef.current && retryCountRef.current < MAX_RETRIES) {
@@ -213,10 +217,13 @@ export function useSSEStream<T = unknown>({
         }
         // After MAX_RETRIES, stop retrying — stay in error state
       }
+    } finally {
+      connectingRef.current = false;
     }
   }, [url, enabled, addEvent]);
 
   const disconnect = useCallback(() => {
+    connectingRef.current = false;
     abortRef.current?.abort();
     abortRef.current = null;
     if (reconnectTimerRef.current) {
