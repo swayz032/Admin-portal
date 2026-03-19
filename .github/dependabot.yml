@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: tuesday
+      time: "07:30"
+    target-branch: main
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    groups:
+      runtime:
+        patterns: ["react", "react-dom", "@supabase/*", "vite"]
+      tooling:
+        patterns: ["eslint*", "vitest*", "typescript", "@types/*"]
