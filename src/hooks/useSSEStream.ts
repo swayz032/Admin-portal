@@ -72,6 +72,11 @@ export function useSSEStream<T = unknown>({
   const backoffRef = useRef(INITIAL_BACKOFF_MS);
   const retryCountRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Refs to avoid re-creating connect() on every render when callers pass inline objects
+  const headersRef = useRef(headers);
+  headersRef.current = headers;
+  const eventTypesRef = useRef(eventTypes);
+  eventTypesRef.current = eventTypes;
 
   const addEvent = useCallback(
     (event: SSEEvent<T>) => {
@@ -104,7 +109,7 @@ export function useSSEStream<T = unknown>({
         headers: {
           Accept: 'text/event-stream',
           'Cache-Control': 'no-cache',
-          ...headers,
+          ...headersRef.current,
         },
         signal: controller.signal,
       });
@@ -150,7 +155,7 @@ export function useSSEStream<T = unknown>({
             // Empty line = end of event
             if (currentData) {
               // Filter by event type if specified
-              if (!eventTypes || eventTypes.includes(currentEventType)) {
+              if (!eventTypesRef.current || eventTypesRef.current.includes(currentEventType)) {
                 let parsed: T;
                 try {
                   parsed = JSON.parse(currentData) as T;
@@ -209,7 +214,7 @@ export function useSSEStream<T = unknown>({
         // After MAX_RETRIES, stop retrying — stay in error state
       }
     }
-  }, [url, enabled, headers, eventTypes, addEvent]);
+  }, [url, enabled, addEvent]);
 
   const disconnect = useCallback(() => {
     abortRef.current?.abort();
