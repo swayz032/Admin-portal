@@ -108,61 +108,85 @@ interface SupabaseIncidentRow {
 }
 
 async function fetchSupabaseIncidentCounts(): Promise<SupabaseIncidentCount[]> {
-  const { data, error } = await supabase.rpc('get_open_incident_counts');
-  if (!error && data) return data as SupabaseIncidentCount[];
+  // Derive incident counts from FAILED/DENIED receipts in last 24h
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: rows, error } = await supabase
+    .from('receipts')
+    .select('status')
+    .gte('created_at', since)
+    .in('status', ['FAILED', 'DENIED']);
+  if (error || !rows) return [];
 
-  // Fallback: query incidents table directly
-  const { data: rows, error: err2 } = await supabase
-    .from('incidents')
-    .select('severity')
-    .eq('status', 'open');
-  if (err2 || !rows) return [];
-
-  const map: Record<string, number> = {};
-  for (const r of rows) {
-    map[r.severity] = (map[r.severity] ?? 0) + 1;
-  }
-  return Object.entries(map).map(([severity, count]) => ({ severity, count }));
+  // Map failure count to severity: >50 failures = P0, >20 = P1, >5 = P2, else P3
+  const failCount = rows.length;
+  if (failCount === 0) return [];
+  if (failCount > 50) return [{ severity: 'P0', count: failCount }];
+  if (failCount > 20) return [{ severity: 'P1', count: failCount }];
+  if (failCount > 5) return [{ severity: 'P2', count: failCount }];
+  return [{ severity: 'P3', count: failCount }];
 }
 
 async function fetchSupabaseProviderHealth(): Promise<SupabaseProviderRow[]> {
-  // Try RPC first (may not exist)
-  const { data, error } = await supabase.rpc('get_provider_health_24h');
-  if (!error && data) return data as SupabaseProviderRow[];
-
-  // Fallback: query provider_call_log directly, aggregate client-side
+  // Derive provider health from receipts (receipt_type prefix → provider name)
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data: rows, error: err2 } = await supabase
-    .from('provider_call_log')
-    .select('provider, latency_ms, status')
+  const { data: rows, error } = await supabase
+    .from('receipts')
+    .select('receipt_type, status')
     .gte('created_at', since);
-  if (err2 || !rows) return [];
+  if (error || !rows) return [];
 
-  const agg: Record<string, { calls: number; totalLatency: number; failures: number }> = {};
+  // Map receipt_type prefix to provider name
+  const providerMap: Record<string, string> = {
+    stripe: 'Stripe', mail: 'PolarisM', calendar: 'Google Calendar',
+    pandadoc: 'PandaDoc', quickbooks: 'QuickBooks', twilio: 'Twilio',
+    livekit: 'LiveKit', elevenlabs: 'ElevenLabs', deepgram: 'Deepgram',
+    gusto: 'Gusto', moov: 'Moov', plaid: 'Plaid', exa: 'Exa',
+    n8n: 'n8n', orchestrator: 'Orchestrator',
+  };
+
+  const agg: Record<string, { calls: number; failures: number }> = {};
   for (const r of rows) {
-    if (!agg[r.provider]) agg[r.provider] = { calls: 0, totalLatency: 0, failures: 0 };
-    agg[r.provider].calls++;
-    agg[r.provider].totalLatency += r.latency_ms ?? 0;
-    if (r.status === 'FAILED') agg[r.provider].failures++;
+    const rt = (r.receipt_type ?? '').toLowerCase();
+    const prefix = Object.keys(providerMap).find(p => rt.startsWith(p));
+    const provider = prefix ? providerMap[prefix] : 'Internal';
+    if (!agg[provider]) agg[provider] = { calls: 0, failures: 0 };
+    agg[provider].calls++;
+    if (r.status === 'FAILED' || r.status === 'DENIED') agg[provider].failures++;
   }
   return Object.entries(agg).map(([provider, v]) => ({
     provider,
     calls: v.calls,
-    avg_latency: v.calls > 0 ? v.totalLatency / v.calls : 0,
+    avg_latency: 0, // receipts don't have latency data
     failures: v.failures,
   }));
 }
 
 async function fetchSupabaseOpenIncidents(): Promise<SupabaseIncidentRow[]> {
+  // Derive "open incidents" from recent FAILED/DENIED receipts
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
-    .from('incidents')
-    .select('id, status, severity, title, correlation_id, suite_id, created_at, updated_at')
-    .eq('status', 'open')
-    .order('severity', { ascending: true })
+    .from('receipts')
+    .select('id, status, receipt_type, action, correlation_id, suite_id, created_at')
+    .gte('created_at', since)
+    .in('status', ['FAILED', 'DENIED'])
     .order('created_at', { ascending: false })
     .limit(50);
   if (error || !data) return [];
-  return data as SupabaseIncidentRow[];
+
+  return data.map(r => {
+    const action = (r.action ?? {}) as Record<string, unknown>;
+    const actionType = (action.action_type as string) ?? (r.receipt_type ?? 'unknown');
+    return {
+      id: r.id,
+      status: 'open',
+      severity: 'P2', // All receipt-derived incidents default to P2
+      title: `${actionType} — ${r.status}`,
+      correlation_id: r.correlation_id ?? '',
+      suite_id: r.suite_id,
+      created_at: r.created_at,
+      updated_at: r.created_at,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
