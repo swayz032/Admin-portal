@@ -37,26 +37,23 @@ const REFRESH_INTERVAL_MS = 30_000;
  * - No open incidents → 'healthy'
  */
 async function deriveStatusFromSupabase(): Promise<SystemStatus> {
-  const { data: openIncidents, error } = await supabase
-    .from('incidents')
-    .select('severity')
-    .eq('status', 'open');
+  // Derive system status from FAILED/DENIED receipt count in last 24h
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { count, error } = await supabase
+    .from('receipts')
+    .select('id', { count: 'exact', head: true })
+    .gte('created_at', since)
+    .in('status', ['FAILED', 'DENIED']);
 
   if (error) {
-    // If the incidents table doesn't exist or query fails, default to healthy
-    // rather than showing an error — the admin portal is still functional
-    console.warn('[SystemStatusBanner] Supabase incidents query failed:', error.message);
+    console.warn('[SystemStatusBanner] Supabase receipts query failed:', error.message);
     return 'healthy';
   }
 
-  const hasCritical = openIncidents?.some(
-    (i) => i.severity === 'critical' || i.severity === 'P0'
-  );
-  const hasHigh = openIncidents?.some(
-    (i) => i.severity === 'high' || i.severity === 'P1'
-  );
-
-  return hasCritical ? 'critical' : hasHigh ? 'degraded' : 'healthy';
+  const failCount = count ?? 0;
+  if (failCount > 50) return 'critical';
+  if (failCount > 20) return 'degraded';
+  return 'healthy';
 }
 
 /**
