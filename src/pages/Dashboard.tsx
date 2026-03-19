@@ -333,12 +333,16 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <KPICard
                   title={viewMode === 'operator' ? "Connected Services" : "Provider Health"}
-                  value={ops.providerHealth.status === 'Healthy'
-                    ? (viewMode === 'operator' ? 'All good' : 'Healthy')
-                    : (viewMode === 'operator' ? 'Issues detected' : 'Degraded')}
-                  subtitle={viewMode === 'engineer' ? `p95 latency: ${formatLatency(ops.providerHealth.p95Latency)}` : undefined}
+                  value={!ops._providerCallsExist
+                    ? (viewMode === 'operator' ? 'No calls yet' : 'No data')
+                    : ops.providerHealth.status === 'Healthy'
+                      ? (viewMode === 'operator' ? 'All good' : 'Healthy')
+                      : (viewMode === 'operator' ? 'Issues detected' : 'Degraded')}
+                  subtitle={!ops._providerCallsExist
+                    ? (viewMode === 'operator' ? 'Calls appear once agents use services' : 'No provider calls recorded')
+                    : viewMode === 'engineer' ? `p95 latency: ${formatLatency(ops.providerHealth.p95Latency)}` : undefined}
                   icon={<Server className="h-4 w-4" />}
-                  status={ops.providerHealth.status === 'Healthy' ? 'success' : 'warning'}
+                  status={!ops._providerCallsExist ? 'info' : ops.providerHealth.status === 'Healthy' ? 'success' : 'warning'}
                   linkTo="/connected-apps"
                 />
                 <KPICard
@@ -365,6 +369,21 @@ export default function Dashboard() {
                   subtitle={viewMode === 'engineer' ? `Burn rate: ${ops.errorBudget.burnRate}x` : 'Remaining this period'}
                   icon={<Gauge className="h-4 w-4" />}
                   status={ops.errorBudget.remaining > 50 ? 'success' : ops.errorBudget.remaining > 20 ? 'warning' : 'critical'}
+                />
+              </div>
+
+              {/* Row 3: MTTR */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <KPICard
+                  title={viewMode === 'operator' ? "Avg Recovery Time" : "MTTR"}
+                  value={ops.mttr.sampleSize > 0 ? `${ops.mttr.minutes}m` : (viewMode === 'operator' ? 'No recoveries today' : 'N/A')}
+                  subtitle={ops.mttr.sampleSize > 0
+                    ? `Based on ${ops.mttr.sampleSize} resolved incident${ops.mttr.sampleSize !== 1 ? 's' : ''}`
+                    : (viewMode === 'operator' ? 'Recovery time appears after issues are resolved' : 'No failure→success pairs today')}
+                  icon={<Clock className="h-4 w-4" />}
+                  status={ops.mttr.sampleSize === 0 ? 'info' : ops.mttr.minutes < 60 ? 'success' : ops.mttr.minutes < 240 ? 'warning' : 'critical'}
+                  linkTo="/incidents"
+                  linkLabel={viewMode === 'operator' ? "See incidents" : "View incidents"}
                 />
               </div>
 
@@ -500,9 +519,11 @@ export default function Dashboard() {
                       <KPICard
                         title={viewMode === 'operator' ? 'Service errors' : 'Provider errors (24h)'}
                         value={providerErrors24h}
-                        subtitle={viewMode === 'engineer' ? `p95: ${ops.providerHealth.p95Latency}ms` : undefined}
+                        subtitle={!ops._providerCallsExist
+                          ? 'No provider calls recorded'
+                          : viewMode === 'engineer' ? `p95: ${ops.providerHealth.p95Latency}ms` : undefined}
                         icon={<Server className="h-4 w-4" />}
-                        status={providerErrors24h > 10 ? 'critical' : 'info'}
+                        status={!ops._providerCallsExist ? 'info' : providerErrors24h > 10 ? 'critical' : 'info'}
                         linkTo="/llm-ops-desk?providerId=stripe"
                         linkLabel="Provider log"
                       />
@@ -644,10 +665,12 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <KPICard
                   title={viewMode === 'operator' ? "Monthly Revenue" : "Monthly Recurring Revenue"}
-                  value={formatCurrency(biz.totalMRR)}
-                  trend={{ value: biz.mrrGrowth, label: 'vs last month' }}
+                  value={biz.totalMRR === 0 && biz.activeCustomers > 0
+                    ? (viewMode === 'operator' ? 'Not set up' : 'MRR tracking not configured')
+                    : formatCurrency(biz.totalMRR)}
+                  trend={biz.totalMRR > 0 ? { value: biz.mrrGrowth, label: 'vs last month' } : undefined}
                   icon={<DollarSign className="h-4 w-4" />}
-                  status="success"
+                  status={biz.totalMRR === 0 && biz.activeCustomers > 0 ? 'info' : 'success'}
                 />
                 <KPICard
                   title="New Subscriptions"
@@ -706,7 +729,15 @@ export default function Dashboard() {
 
               {/* MRR Trend Chart */}
               <Panel title={viewMode === 'operator' ? "Revenue Trend (Last 30 Days)" : "MRR Trend (Last 30 Days)"}>
-                {biz.mrrTrend.length > 0 ? (
+                {biz.totalMRR === 0 && biz.mrrTrend.length === 0 ? (
+                  <div className="h-64 flex items-center justify-center">
+                    <p className="text-sm text-muted-foreground">
+                      {viewMode === 'operator'
+                        ? "Revenue tracking hasn't been set up yet. Connect Stripe to see your revenue trend."
+                        : "No MRR data collected. Configure billing integration to populate this chart."}
+                    </p>
+                  </div>
+                ) : biz.mrrTrend.length > 0 ? (
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={biz.mrrTrend}>

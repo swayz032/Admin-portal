@@ -283,13 +283,13 @@ export function useProviders() {
             p.automation_status ? `Automation: ${formatAutomationStatus(p.automation_status)}` : null,
             (p.scopes ?? []).length > 0 ? `${(p.scopes ?? []).length} scopes connected` : 'No scopes configured',
           ].filter(Boolean).join(' · '),
-          rotationMode: p.rotation_mode ?? 'unknown',
-          automationStatus: p.automation_status ?? 'unknown',
-          verificationSource: p.verification_source ?? 'unknown',
-          adapterType: p.adapter_type ?? 'unknown',
+          rotationMode: p.rotation_mode ?? 'Not configured',
+          automationStatus: p.automation_status ?? 'Not configured',
+          verificationSource: p.verification_source ?? 'Not configured',
+          adapterType: p.adapter_type ?? 'Not configured',
           adapterName: p.adapter_name ?? '',
           secretId: p.secret_id ?? '',
-          secretSource: p.secret_source ?? 'unknown',
+          secretSource: p.secret_source ?? 'Not configured',
           productionVerified: p.production_verified ?? false,
         }));
         return {

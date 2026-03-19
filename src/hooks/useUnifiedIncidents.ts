@@ -27,6 +27,7 @@ export function useUnifiedIncidents(filters?: {
   status?: string;
   page?: number;
   pageSize?: number;
+  view?: 'grouped' | 'all';
 }): UseUnifiedIncidentsResult {
   const { data: realtimeIncidents, loading, error, count, refetch } = useRealtimeIncidents(filters);
   const { errors: backendErrors } = useErrorStream();

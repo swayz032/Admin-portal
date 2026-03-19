@@ -16,6 +16,7 @@ interface IncidentFilters {
   status?: string;
   page?: number;
   pageSize?: number;
+  view?: 'grouped' | 'all';
 }
 
 export function useRealtimeIncidents(filters?: IncidentFilters) {
@@ -41,7 +42,7 @@ export function useRealtimeIncidents(filters?: IncidentFilters) {
     } finally {
       if (id === fetchIdRef.current) setLoading(false);
     }
-  }, [filters?.severity, filters?.status, filters?.page, filters?.pageSize]);
+  }, [filters?.severity, filters?.status, filters?.page, filters?.pageSize, filters?.view]);
 
   // Initial load
   useEffect(() => { load(); }, [load]);

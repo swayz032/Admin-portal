@@ -311,31 +311,48 @@ export default function ConnectedApps() {
                 </div>
 
                 {viewMode === 'engineer' && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                      <p className="text-xs text-muted-foreground">Rotation Mode</p>
-                      <p className="text-sm">{selectedProvider.rotationMode?.replace(/_/g, ' ') || 'unknown'}</p>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                        <p className="text-xs text-muted-foreground">Rotation Mode</p>
+                        <p className="text-sm">{selectedProvider.rotationMode?.replace(/_/g, ' ') || 'Not configured'}</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                        <p className="text-xs text-muted-foreground">Automation Status</p>
+                        <p className="text-sm">{selectedProvider.automationStatus?.replace(/_/g, ' ') || 'Not configured'}</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                        <p className="text-xs text-muted-foreground">Secret Source</p>
+                        <p className="text-sm">{selectedProvider.secretSource?.replace(/_/g, ' ') || 'Not configured'}</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                        <p className="text-xs text-muted-foreground">Verification Source</p>
+                        <p className="text-sm">{selectedProvider.verificationSource?.replace(/_/g, ' ') || 'Not configured'}</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                        <p className="text-xs text-muted-foreground">Adapter</p>
+                        <p className="text-sm">{selectedProvider.adapterName || selectedProvider.adapterType || 'Not configured'}</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                        <p className="text-xs text-muted-foreground">Secret ID</p>
+                        <p className="text-sm break-all">{selectedProvider.secretId || 'Not configured'}</p>
+                      </div>
                     </div>
-                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                      <p className="text-xs text-muted-foreground">Automation Status</p>
-                      <p className="text-sm">{selectedProvider.automationStatus?.replace(/_/g, ' ') || 'unknown'}</p>
-                    </div>
-                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                      <p className="text-xs text-muted-foreground">Secret Source</p>
-                      <p className="text-sm">{selectedProvider.secretSource?.replace(/_/g, ' ') || 'unknown'}</p>
-                    </div>
-                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                      <p className="text-xs text-muted-foreground">Verification Source</p>
-                      <p className="text-sm">{selectedProvider.verificationSource?.replace(/_/g, ' ') || 'unknown'}</p>
-                    </div>
-                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                      <p className="text-xs text-muted-foreground">Adapter</p>
-                      <p className="text-sm">{selectedProvider.adapterName || selectedProvider.adapterType || 'unknown'}</p>
-                    </div>
-                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                      <p className="text-xs text-muted-foreground">Secret ID</p>
-                      <p className="text-sm break-all">{selectedProvider.secretId || 'unknown'}</p>
-                    </div>
+                    {(selectedProvider.rotationMode === 'Not configured' || selectedProvider.secretSource === 'Not configured') && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="p-3 rounded-lg bg-muted/30 border border-border/50 flex items-center gap-2 cursor-help">
+                            <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <p className="text-xs text-muted-foreground">
+                              Some fields show "Not configured" — connect AWS Secrets Manager to see rotation data
+                            </p>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-xs">
+                          <p>Rotation mode, automation status, and secret source are populated from AWS Secrets Manager via the backend ops facade. Ensure the backend has AWS SM credentials configured and the /admin/ops/providers endpoint is returning rotation data.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                   </div>
                 )}
 

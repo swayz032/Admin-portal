@@ -260,12 +260,19 @@ export default function ProviderCallLogPage() {
           <div className="empty-state">
             <Server className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
             <h3 className="text-lg font-medium mb-2">
-              <ModeText operator="No service calls found" engineer="No provider calls match filters" />
-            </h3>
-            <p className="text-muted-foreground text-sm">
               <ModeText
-                operator="Calls to connected services will appear here"
-                engineer="Adjust filters or search term"
+                operator={logs.length === 0 ? "No service calls yet" : "No service calls found"}
+                engineer={logs.length === 0 ? "No provider calls recorded" : "No provider calls match filters"}
+              />
+            </h3>
+            <p className="text-muted-foreground text-sm max-w-md mx-auto">
+              <ModeText
+                operator={logs.length === 0
+                  ? "Calls will appear here once your agents interact with connected services like Stripe, QuickBooks, or PandaDoc."
+                  : "Try adjusting your filters to find what you're looking for."}
+                engineer={logs.length === 0
+                  ? "No entries in provider_call_log. Rows are created when the orchestrator executes tool calls against external providers (Stripe, QuickBooks, PandaDoc, etc.)."
+                  : "Adjust filters or search term."}
               />
             </p>
           </div>
