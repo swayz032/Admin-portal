@@ -41,7 +41,7 @@ async function deriveStatusFromSupabase(): Promise<SystemStatus> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { count, error } = await supabase
     .from('receipts')
-    .select('id', { count: 'exact', head: true })
+    .select('receipt_id', { count: 'exact', head: true })
     .gte('created_at', since)
     .in('status', ['FAILED', 'DENIED']);
 

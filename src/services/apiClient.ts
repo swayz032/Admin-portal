@@ -1338,7 +1338,7 @@ export async function fetchOpsMetrics(): Promise<OpsMetrics> {
 
   // Parallel queries for efficiency
   const [approvalsRes, receiptsRes, outboxRes, callsRes] = await Promise.all([
-    supabase.from('approval_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('approval_requests').select('approval_id', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('receipts').select('status, receipt_type, action', { count: 'exact' }).gte('created_at', todayStr),
     supabase.from('outbox_jobs').select('status, attempts', { count: 'exact' }).in('status', ['queued', 'processing', 'retrying']),
     supabase.from('provider_call_log').select('duration_ms, status').gte('started_at', todayStr).order('duration_ms', { ascending: false }).limit(100),
