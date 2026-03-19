@@ -16,7 +16,8 @@ const SOURCE_CONFIG: Record<SourceCategory, { label: string; colorClass: string 
   security: { label: 'Security', colorClass: 'bg-red-500/15 text-red-400' },
 };
 
-export function deriveSourceCategory(receiptType: string): SourceCategory {
+export function deriveSourceCategory(receiptType: string | null | undefined): SourceCategory {
+  if (!receiptType) return 'backend';
   const rt = receiptType.toLowerCase();
 
   // n8n workflows

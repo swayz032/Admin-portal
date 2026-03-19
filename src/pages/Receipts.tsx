@@ -128,13 +128,13 @@ export default function Receipts() {
     {
       key: 'created_at',
       header: 'When',
-      render: (r: Receipt) => <span className="text-muted-foreground">{formatTimeAgo(r.created_at)}</span>
+      render: (r: Receipt) => <span className="text-muted-foreground">{r.created_at ? formatTimeAgo(r.created_at) : '—'}</span>
     },
     {
       key: 'domain',
       header: 'Type',
       render: (r: Receipt) => {
-        const badge = getDomainBadge(r.domain);
+        const badge = getDomainBadge(r.domain ?? '');
         return (
           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${badge.className}`}>
             {badge.label}
@@ -142,7 +142,7 @@ export default function Receipts() {
         );
       }
     },
-    { key: 'action_type', header: 'What happened', render: (r: Receipt) => <span className="text-sm">{derivePremiumActionLabel(r.action_type, 'operator')}</span> },
+    { key: 'action_type', header: 'What happened', render: (r: Receipt) => <span className="text-sm">{derivePremiumActionLabel(r.action_type ?? '', 'operator')}</span> },
     { key: 'provider', header: 'Service', render: (r: Receipt) => r.provider || 'Internal' },
     {
       key: 'status',
@@ -158,27 +158,27 @@ export default function Receipts() {
     {
       key: 'id',
       header: 'Receipt ID',
-      render: (r: Receipt) => <CopyableId fullId={r.id} displayId={formatReceiptId(r.id)} isCopied={copiedId === r.id} onCopy={copyToClipboard} />
+      render: (r: Receipt) => <CopyableId fullId={r.id || ''} displayId={formatReceiptId(r.id)} isCopied={copiedId === r.id} onCopy={copyToClipboard} />
     },
     {
       key: 'created_at',
       header: 'Timestamp',
-      render: (r: Receipt) => <span className="text-muted-foreground text-xs">{new Date(r.created_at).toLocaleString()}</span>
+      render: (r: Receipt) => <span className="text-muted-foreground text-xs">{r.created_at ? new Date(r.created_at).toLocaleString() : '—'}</span>
     },
     {
       key: 'origin',
       header: 'Origin',
-      render: (r: Receipt) => <SourceBadge source={deriveSourceCategory(r.receipt_type ?? r.domain ?? '')} />,
+      render: (r: Receipt) => <SourceBadge source={deriveSourceCategory(r.receipt_type ?? r.domain)} />,
     },
     { key: 'domain', header: 'Domain' },
     { key: 'action_type', header: 'Action Type', render: (r: Receipt) => (
-      <span className="text-sm" title={r.action_type}>{derivePremiumActionLabel(r.action_type, 'engineer')}</span>
+      <span className="text-sm" title={r.action_type ?? ''}>{derivePremiumActionLabel(r.action_type ?? '', 'engineer')}</span>
     ) },
     {
       key: 'status',
       header: 'Status',
       render: (r: Receipt) => (
-        <StatusChip status={getStatusColor(r.status)} label={r.status} />
+        <StatusChip status={getStatusColor(r.status)} label={r.status ?? 'pending'} />
       )
     },
     {
@@ -294,7 +294,7 @@ export default function Receipts() {
           <DataTable
             data={filteredReceipts}
             columns={columns}
-            keyExtractor={(r) => r.id}
+            keyExtractor={(r) => r.id || crypto.randomUUID()}
             onRowClick={(receipt) => setSelectedReceipt(receipt)}
             resultLabel="receipts"
           />
@@ -353,7 +353,7 @@ export default function Receipts() {
                         <span className="text-sm text-muted-foreground">Receipt ID</span>
                         <div className="flex items-center gap-2">
                           <code className="text-xs font-bold text-primary">{formatReceiptId(selectedReceipt.id)}</code>
-                          <button onClick={() => copyToClipboard(selectedReceipt.id)} className="text-muted-foreground hover:text-foreground">
+                          <button onClick={() => selectedReceipt.id && copyToClipboard(selectedReceipt.id)} className="text-muted-foreground hover:text-foreground">
                             {copiedId === selectedReceipt.id ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
                           </button>
                         </div>

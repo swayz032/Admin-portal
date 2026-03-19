@@ -130,7 +130,7 @@ export default function ConferenceMonitor() {
       key: 'correlation_id',
       header: 'Correlation ID',
       render: (r: TrustReceipt) => (
-        <span className="font-mono text-xs text-primary">{r.correlation_id.slice(0, 16)}...</span>
+        <span className="font-mono text-xs text-primary">{(r.correlation_id ?? '').slice(0, 16) || '—'}...</span>
       ),
     },
     {
