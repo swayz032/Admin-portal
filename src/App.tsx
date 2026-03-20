@@ -45,6 +45,7 @@ const Outbox = lazy(() => import("./pages/Outbox"));
 const ProviderCallLog = lazy(() => import("./pages/ProviderCallLog"));
 const TraceView = lazy(() => import("./pages/TraceView"));
 const ClientEvents = lazy(() => import("./pages/ClientEvents"));
+const FrontendHealth = lazy(() => import("./pages/FrontendHealth"));
 
 // Business Control pages
 const RunwayBurn = lazy(() => import("./pages/business/RunwayBurn"));
@@ -315,6 +316,16 @@ const App = () => (
                   <ProtectedRoute>
                     <AppLayout>
                       <TraceView />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/frontend-health"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <FrontendHealth />
                     </AppLayout>
                   </ProtectedRoute>
                 }

@@ -33,6 +33,7 @@ import {
   HeartPulse,
   BarChart2,
   Workflow,
+  Radar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -69,6 +70,7 @@ const operationsItems = [
 ];
 
 const platformItems = [
+  { to: '/frontend-health', icon: Radar, label: 'Frontend Health', engineerLabel: 'Frontend Health' },
   { to: '/connected-apps', icon: Plug, label: 'Services', engineerLabel: 'Providers' },
   { to: '/provider-call-log', icon: Server, label: 'Call Log', engineerLabel: 'Provider Logs' },
   { to: '/client-events', icon: Monitor, label: 'Client Events', engineerLabel: 'Client Events' },

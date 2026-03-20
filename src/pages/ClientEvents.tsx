@@ -18,6 +18,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { supabase } from '@/integrations/supabase/client';
 import { formatTimeAgo } from '@/lib/formatters';
 import {
+  getEventFlightRecorder,
+  mapClientEvent as mapSharedClientEvent,
+  type ClientEventRaw as SharedClientEventRaw,
+} from '@/lib/clientEvents';
+import {
   Monitor,
   Search,
   ChevronLeft,
@@ -53,24 +58,34 @@ interface ClientEvent {
   user_agent: string | null;
   component: string | null;
   page_route: string | null;
+  release: string | null;
+  contract_id: string | null;
+  flow_id: string | null;
+  runtime: string | null;
+  flight_recorder_count: number;
 }
 
 /** Extract human-readable fields from the raw DB row's `data` jsonb column */
 function mapClientEvent(raw: ClientEventRaw): ClientEvent {
-  const data = raw.data ?? {};
+  const mapped = mapSharedClientEvent(raw as SharedClientEventRaw);
   return {
-    id: raw.id,
-    source: raw.source ?? 'unknown',
-    severity: raw.severity ?? 'info',
-    event_type: raw.event_type,
-    message: (data.message as string) ?? (data.error_code as string) ?? raw.event_type ?? '',
-    correlation_id: raw.correlation_id,
-    metadata: data,
-    created_at: raw.created_at,
-    session_id: raw.session_id,
-    user_agent: (data.user_agent as string) ?? null,
-    component: raw.component ?? (data.component as string) ?? null,
-    page_route: raw.page_route ?? (data.page_route as string) ?? null,
+    id: mapped.id,
+    source: mapped.source,
+    severity: mapped.severity,
+    event_type: mapped.eventType,
+    message: mapped.message,
+    correlation_id: mapped.correlationId,
+    metadata: mapped.metadata,
+    created_at: mapped.createdAt,
+    session_id: mapped.sessionId,
+    user_agent: mapped.userAgent,
+    component: mapped.component,
+    page_route: mapped.pageRoute,
+    release: mapped.release,
+    contract_id: mapped.contractId,
+    flow_id: mapped.flowId,
+    runtime: mapped.runtime,
+    flight_recorder_count: getEventFlightRecorder(mapped).length,
   };
 }
 
@@ -303,6 +318,14 @@ export default function ClientEvents() {
             engineer="Frontend telemetry from the client_events table with Realtime subscription"
           />
         </p>
+        <div className="pt-3">
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/frontend-health">
+              Frontend Health
+              <ExternalLink className="h-4 w-4 ml-2" />
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -486,9 +509,51 @@ export default function ClientEvents() {
                       <span className="text-xs text-muted-foreground truncate max-w-[250px]" title={selectedEvent.user_agent}>
                         {selectedEvent.user_agent}
                       </span>
-                    </div>
-                  )}
-                </div>
+                      </div>
+                    )}
+                    {selectedEvent.page_route && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Route</span>
+                        <code className="text-xs bg-surface-2 px-2 py-1 rounded">{selectedEvent.page_route}</code>
+                      </div>
+                    )}
+                    {selectedEvent.component && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Component</span>
+                        <code className="text-xs bg-surface-2 px-2 py-1 rounded">{selectedEvent.component}</code>
+                      </div>
+                    )}
+                    {selectedEvent.contract_id && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Contract</span>
+                        <code className="text-xs bg-surface-2 px-2 py-1 rounded">{selectedEvent.contract_id}</code>
+                      </div>
+                    )}
+                    {selectedEvent.flow_id && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Flow</span>
+                        <code className="text-xs bg-surface-2 px-2 py-1 rounded">{selectedEvent.flow_id}</code>
+                      </div>
+                    )}
+                    {selectedEvent.release && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Release</span>
+                        <code className="text-xs bg-surface-2 px-2 py-1 rounded">{selectedEvent.release}</code>
+                      </div>
+                    )}
+                    {selectedEvent.runtime && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Runtime</span>
+                        <span className="text-sm">{selectedEvent.runtime}</span>
+                      </div>
+                    )}
+                    {selectedEvent.flight_recorder_count > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Flight Recorder</span>
+                        <span className="text-sm">{selectedEvent.flight_recorder_count} events attached</span>
+                      </div>
+                    )}
+                  </div>
 
                 {viewMode === 'engineer' && (
                   <>
