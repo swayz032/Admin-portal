@@ -8,10 +8,7 @@ describe('opsFacadeClient rotation summary', () => {
 
     Object.defineProperty(window, 'localStorage', {
       value: {
-        getItem: vi.fn((key: string) => {
-          if (key === 'aspire_admin_token') return 'test-admin-token';
-          return null;
-        }),
+        getItem: vi.fn(() => null),
         setItem: vi.fn(),
         removeItem: vi.fn(),
         clear: vi.fn(),
@@ -22,6 +19,7 @@ describe('opsFacadeClient rotation summary', () => {
     Object.defineProperty(window, 'sessionStorage', {
       value: {
         getItem: vi.fn((key: string) => {
+          if (key === 'aspire_admin_token') return 'test-admin-token';
           if (key === 'aspire.admin.scope.suiteId') return 'suite-123';
           return null;
         }),
@@ -61,7 +59,7 @@ describe('opsFacadeClient rotation summary', () => {
 
     expect(response.summary.automated_count).toBe(5);
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8000/admin/ops/providers/rotation-summary',
+      expect.stringMatching(/\/admin\/ops\/providers\/rotation-summary$/),
       expect.objectContaining({
         headers: expect.objectContaining({
           'Content-Type': 'application/json',

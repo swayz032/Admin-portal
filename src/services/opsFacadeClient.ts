@@ -17,6 +17,11 @@ const OPS_BASE_URL = (
   'http://localhost:8000'
 ).replace(/\/+$/, '');
 
+const OPS_PUBLIC_PATHS = new Set([
+  '/admin/auth/exchange',
+  '/admin/ops/health',
+]);
+
 // ============================================================================
 // TYPES — match backend response shapes
 // ============================================================================
@@ -273,6 +278,7 @@ export interface OpsSentryIssuesResponse {
 // ============================================================================
 
 import { getAdminToken, getSuiteId, setAdminToken, clearAdminToken as clearToken } from '@/lib/adminAuth';
+import { supabase } from '@/integrations/supabase/client';
 export { clearToken as clearAdminToken };
 
 // Re-export getAdminToken for backward compat
@@ -296,6 +302,8 @@ export function buildOpsFacadeUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${OPS_BASE_URL}${normalizedPath}`;
 }
+
+let adminTokenRefreshPromise: Promise<string> | null = null;
 
 export function buildOpsHeaders(options?: {
   includeJson?: boolean;
@@ -347,14 +355,70 @@ export function buildOpsHeaders(options?: {
   return headers;
 }
 
+async function tryEnsureAdminToken(forceRefresh = false): Promise<string> {
+  if (!forceRefresh) {
+    const existingToken = getAdminToken();
+    if (existingToken) {
+      return existingToken;
+    }
+  }
+
+  if (!adminTokenRefreshPromise) {
+    adminTokenRefreshPromise = (async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          return '';
+        }
+
+        const accessToken = data.session?.access_token ?? '';
+        if (!accessToken) {
+          return '';
+        }
+
+        const exchange = await exchangeAdminToken(accessToken);
+        return exchange.admin_token;
+      } catch {
+        return '';
+      }
+    })();
+  }
+
+  try {
+    return await adminTokenRefreshPromise;
+  } finally {
+    adminTokenRefreshPromise = null;
+  }
+}
+
 async function opsFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(buildOpsFacadeUrl(path), {
+  const shouldAttachAdminToken = !OPS_PUBLIC_PATHS.has(path);
+
+  if (shouldAttachAdminToken && !getAdminToken()) {
+    await tryEnsureAdminToken();
+  }
+
+  let response = await fetch(buildOpsFacadeUrl(path), {
     ...init,
     headers: {
       ...buildOpsHeaders(),
       ...(init?.headers as Record<string, string> ?? {}),
     },
   });
+
+  if (shouldAttachAdminToken && response.status === 401) {
+    clearToken();
+    const refreshedToken = await tryEnsureAdminToken(true);
+    if (refreshedToken) {
+      response = await fetch(buildOpsFacadeUrl(path), {
+        ...init,
+        headers: {
+          ...buildOpsHeaders(),
+          ...(init?.headers as Record<string, string> ?? {}),
+        },
+      });
+    }
+  }
 
   if (!response.ok) {
     const error: OpsError = await response.json().catch(() => ({

@@ -9,10 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 function mockAuth() {
   Object.defineProperty(window, 'localStorage', {
     value: {
-      getItem: vi.fn((key: string) => {
-        if (key === 'aspire_admin_token') return 'test-token';
-        return null;
-      }),
+      getItem: vi.fn(() => null),
       setItem: vi.fn(),
       removeItem: vi.fn(),
       clear: vi.fn(),
@@ -22,6 +19,7 @@ function mockAuth() {
   Object.defineProperty(window, 'sessionStorage', {
     value: {
       getItem: vi.fn((key: string) => {
+        if (key === 'aspire_admin_token') return 'test-token';
         if (key === 'aspire.admin.scope.suiteId') return 'suite-123';
         return null;
       }),
