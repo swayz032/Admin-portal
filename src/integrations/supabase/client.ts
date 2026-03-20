@@ -81,8 +81,8 @@ function createUnavailableClient(reason: string): SupabaseClient<Database> {
 export const supabase = supabaseConfigStatus.isValid
   ? createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
       auth: {
-        storage: sessionStorage,
-        persistSession: true,
+        // Admin auth should not survive a full page reload or restored tab session.
+        persistSession: false,
         autoRefreshToken: true,
       },
     })
