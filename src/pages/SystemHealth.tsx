@@ -13,10 +13,14 @@ import {
   fetchOpsDashboardMetrics,
   fetchOpsProviders,
   fetchOpsIncidents,
+  fetchOpsSentrySummary,
+  fetchOpsSentryIssues,
   type OpsDeepHealthResponse,
   type OpsDashboardMetrics,
   type OpsProviderStatus,
   type OpsIncidentSummary,
+  type OpsSentrySummary,
+  type OpsSentryIssue,
 } from '@/services/opsFacadeClient';
 import {
   Server,
@@ -31,6 +35,8 @@ import {
   Activity,
   Clock,
   WifiOff,
+  Bug,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatTimeAgo } from '@/lib/formatters';
@@ -78,6 +84,21 @@ function getProviderStatusChip(status: string): { status: 'success' | 'warning' 
     default:
       return { status: 'warning', label: status };
   }
+}
+
+function worstStatus(...statuses: Array<'healthy' | 'degraded' | 'critical' | null | undefined>): 'healthy' | 'degraded' | 'critical' {
+  const severity = { healthy: 0, degraded: 1, critical: 2 };
+  return statuses.reduce<'healthy' | 'degraded' | 'critical'>((worst, candidate) => {
+    if (!candidate) return worst;
+    return severity[candidate] > severity[worst] ? candidate : worst;
+  }, 'healthy');
+}
+
+function coerceSentryStatus(status: OpsSentrySummary['status'] | undefined): 'healthy' | 'degraded' | 'critical' | null {
+  if (status === 'healthy' || status === 'degraded' || status === 'critical') {
+    return status;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +187,7 @@ async function fetchSupabaseOpenIncidents(): Promise<SupabaseIncidentRow[]> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('receipts')
-    .select('id, status, receipt_type, action, correlation_id, suite_id, created_at')
+    .select('receipt_id, status, receipt_type, action, correlation_id, suite_id, created_at')
     .gte('created_at', since)
     .in('status', ['FAILED', 'DENIED'])
     .order('created_at', { ascending: false })
@@ -177,7 +198,7 @@ async function fetchSupabaseOpenIncidents(): Promise<SupabaseIncidentRow[]> {
     const action = (r.action ?? {}) as Record<string, unknown>;
     const actionType = (action.action_type as string) ?? (r.receipt_type ?? 'unknown');
     return {
-      id: r.id,
+      id: r.receipt_id,
       status: 'open',
       severity: 'P2', // All receipt-derived incidents default to P2
       title: `${actionType} — ${r.status}`,
@@ -259,6 +280,10 @@ export default function SystemHealth() {
   const [dashMetrics, setDashMetrics] = useState<OpsDashboardMetrics | null>(null);
   const [providers, setProviders] = useState<OpsProviderStatus[]>([]);
   const [incidents, setIncidents] = useState<OpsIncidentSummary[]>([]);
+  const [sentrySummary, setSentrySummary] = useState<OpsSentrySummary | null>(null);
+  const [sentryIssues, setSentryIssues] = useState<OpsSentryIssue[]>([]);
+  const [sentrySource, setSentrySource] = useState<string>('disabled');
+  const [sentryWarnings, setSentryWarnings] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [backendOffline, setBackendOffline] = useState(false);
 
@@ -312,16 +337,18 @@ export default function SystemHealth() {
     // OPTIONAL: Ops facade (enhances data if backend is reachable)
     // -----------------------------------------------------------------------
     try {
-      const [healthRes, metricsRes, providersRes, incidentsRes] = await Promise.allSettled([
+      const [healthRes, metricsRes, providersRes, incidentsRes, sentrySummaryRes, sentryIssuesRes] = await Promise.allSettled([
         fetchOpsDeepHealth(),
         fetchOpsDashboardMetrics(),
         fetchOpsProviders(),
         fetchOpsIncidents({ state: 'open', limit: 50 }),
+        fetchOpsSentrySummary(),
+        fetchOpsSentryIssues({ limit: 10 }),
       ]);
 
       if (!mountedRef.current) return;
 
-      const allFailed = [healthRes, metricsRes, providersRes, incidentsRes].every(r => r.status === 'rejected');
+      const allFailed = [healthRes, metricsRes, providersRes, incidentsRes, sentrySummaryRes, sentryIssuesRes].every(r => r.status === 'rejected');
 
       if (allFailed) {
         // Backend unreachable — Supabase data is still displayed
@@ -337,6 +364,14 @@ export default function SystemHealth() {
         }
         if (incidentsRes.status === 'fulfilled' && incidentsRes.value.items.length > 0) {
           setIncidents(incidentsRes.value.items);
+        }
+        if (sentrySummaryRes.status === 'fulfilled') {
+          setSentrySummary(sentrySummaryRes.value.summary);
+          setSentrySource(sentrySummaryRes.value.summary.source);
+          setSentryWarnings(sentrySummaryRes.value.summary.warnings ?? []);
+        }
+        if (sentryIssuesRes.status === 'fulfilled') {
+          setSentryIssues(sentryIssuesRes.value.items);
         }
       }
     } catch {
@@ -393,7 +428,10 @@ export default function SystemHealth() {
   }
 
   // Prefer ops facade status, fall back to Supabase-derived
-  const overallStatus = deepHealth?.status ?? sbOverallStatus;
+  const overallStatus = worstStatus(
+    deepHealth?.status ?? sbOverallStatus,
+    sentrySummary?.configured ? coerceSentryStatus(sentrySummary.status) : null,
+  );
   const checks = deepHealth?.checks ?? {};
   const healthyCount = Object.values(checks).filter(c => c.status === 'ok').length;
   const totalChecks = Object.keys(checks).length;
@@ -422,6 +460,9 @@ export default function SystemHealth() {
   }
 
   const successRateNum = providerSuccessRate ?? (providers.length > 0 ? 100 - providers.reduce((s, p) => s + p.error_rate, 0) / providers.length : 100);
+  const sentryOpenCount = sentrySummary?.open_issue_count ?? 0;
+  const sentryCriticalCount = sentrySummary?.critical_count ?? 0;
+  const sentryStatus = coerceSentryStatus(sentrySummary?.status) ?? 'healthy';
 
   return (
     <div className="space-y-6">
@@ -453,7 +494,7 @@ export default function SystemHealth() {
       </div>
 
       {/* Overall Status KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <KPICard
           title={viewMode === 'operator' ? 'System Status' : 'Overall Health'}
           value={overallStatus === 'healthy' ? 'Healthy' : overallStatus === 'degraded' ? 'Degraded' : 'Critical'}
@@ -499,6 +540,29 @@ export default function SystemHealth() {
               : successRateNum >= 95
                 ? 'warning'
                 : 'critical'
+          }
+        />
+        <KPICard
+          title="Sentry Issues"
+          value={sentryOpenCount}
+          subtitle={sentrySource === 'disabled'
+            ? 'Sentry not configured'
+            : sentrySource === 'unavailable'
+              ? 'Sentry API unavailable'
+              : sentrySummary?.regression_count
+                ? `${sentrySummary.regression_count} regressions`
+                : sentryOpenCount > 0
+                  ? `${sentryCriticalCount} high severity`
+                  : 'No active issues'}
+          icon={<Bug className="h-4 w-4" />}
+          status={
+            sentrySource === 'disabled' || sentrySource === 'unavailable'
+              ? 'warning'
+              : sentryStatus === 'critical'
+                ? 'critical'
+                : sentryStatus === 'degraded'
+                  ? 'warning'
+                  : 'success'
           }
         />
       </div>
@@ -560,6 +624,84 @@ export default function SystemHealth() {
               <EmptyState variant="no-data" title="No dependency checks available" />
             )}
           </>
+        )}
+      </Panel>
+
+      {/* Sentry Health */}
+      <Panel
+        title="Sentry"
+        subtitle={sentrySummary?.issues_url ? 'Linked to live Sentry issue data' : 'Operational error and regression summary'}
+        action={
+          sentrySummary?.issues_url ? (
+            <a
+              href={sentrySummary.issues_url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+            >
+              Open Sentry
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          ) : undefined
+        }
+      >
+        {sentrySource === 'disabled' ? (
+          <EmptyState
+            variant="no-data"
+            title="Sentry is not configured"
+            description="Add Sentry credentials to enable issue sync and release tracking."
+          />
+        ) : sentrySource === 'unavailable' ? (
+          <EmptyState
+            variant="error"
+            title="Sentry sync unavailable"
+            description={sentryWarnings[0] ?? 'The Sentry API could not be reached.'}
+          />
+        ) : sentryIssues.length > 0 ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <StatusChip
+                status={sentryStatus === 'critical' ? 'critical' : sentryStatus === 'degraded' ? 'warning' : 'success'}
+                label={sentryStatus === 'critical' ? 'Action required' : sentryStatus === 'degraded' ? 'Issues open' : 'Healthy'}
+              />
+              {typeof sentrySummary?.project_count === 'number' && sentrySummary.project_count > 0 ? (
+                <span>{sentrySummary.project_count} projects affected</span>
+              ) : null}
+              {sentrySummary?.last_seen ? (
+                <span>Last seen {formatTimeAgo(sentrySummary.last_seen)}</span>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              {sentryIssues.map((issue) => (
+                <a
+                  key={issue.id}
+                  href={issue.permalink ?? sentrySummary?.issues_url ?? '#'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-3 p-3 rounded-lg border border-border/50 hover:bg-accent/30 transition-colors"
+                >
+                  <SeverityBadge severity={issue.level === 'fatal' || issue.level === 'error' ? 'P1' : 'P3'} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{issue.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {issue.project_name} - {issue.count} events - {issue.user_count} users
+                      {issue.is_regression ? ' - regression' : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Clock className="h-3 w-3" />
+                    {issue.last_seen ? formatTimeAgo(issue.last_seen) : 'Unknown'}
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <EmptyState
+            variant="all-done"
+            title="No active Sentry issues"
+            description="No unresolved Sentry issues are currently affecting tracked surfaces."
+          />
         )}
       </Panel>
 

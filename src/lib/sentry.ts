@@ -60,6 +60,27 @@ function scrubDict(data: Record<string, unknown>): Record<string, unknown> {
   return result;
 }
 
+function parseRate(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseFloat(value ?? '');
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return parsed;
+}
+
+function buildTraceTargets(): Array<string | RegExp> {
+  const targets: Array<string | RegExp> = [/^\//];
+  const opsFacadeUrl = import.meta.env.VITE_OPS_FACADE_URL;
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+  for (const raw of [opsFacadeUrl, apiBaseUrl]) {
+    if (!raw) continue;
+    try {
+      targets.push(new URL(raw).origin);
+    } catch {
+      // Ignore malformed optional config.
+    }
+  }
+  return targets;
+}
+
 // ---------------------------------------------------------------------------
 // Sentry initialization
 // ---------------------------------------------------------------------------
@@ -71,20 +92,45 @@ function scrubDict(data: Record<string, unknown>): Record<string, unknown> {
 export function initSentry(): void {
   const dsn = import.meta.env.VITE_SENTRY_DSN;
   if (!dsn) {
-    // Silent — Sentry is optional in Admin Portal
     return;
   }
+
+  const environment = import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE ?? 'development';
+  const release =
+    import.meta.env.VITE_ASPIRE_RELEASE ??
+    __SENTRY_RELEASE__ ??
+    __APP_VERSION__ ??
+    'aspire-admin@1.0.0';
+  const tracesSampleRate = parseRate(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE, 0.1);
+  const replaysSessionSampleRate = parseRate(import.meta.env.VITE_SENTRY_REPLAY_SESSION_SAMPLE_RATE, 0.0);
+  const replaysOnErrorSampleRate = parseRate(import.meta.env.VITE_SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE, 1.0);
 
   import('@sentry/react')
     .then((Sentry) => {
       Sentry.init({
         dsn,
-        environment: import.meta.env.MODE ?? 'development',
-        release: import.meta.env.VITE_ASPIRE_RELEASE ?? import.meta.env.VITE_APP_VERSION ?? 'aspire-admin@1.0.0',
+        environment,
+        release,
         sendDefaultPii: false,
-        tracesSampleRate: parseFloat(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE ?? '0.1'),
+        tracesSampleRate,
+        replaysSessionSampleRate,
+        replaysOnErrorSampleRate,
+        tracePropagationTargets: buildTraceTargets(),
+        integrations: [
+          Sentry.browserTracingIntegration(),
+          Sentry.replayIntegration(),
+        ],
+        ignoreErrors: [
+          'ResizeObserver loop limit exceeded',
+          'ResizeObserver loop completed with undelivered notifications.',
+        ],
+        initialScope: {
+          tags: {
+            service: 'admin-portal-web',
+            runtime: 'browser',
+          },
+        },
         beforeSend(event) {
-          // Scrub request data
           if (event.request) {
             if (event.request.headers && typeof event.request.headers === 'object') {
               event.request.headers = scrubDict(
@@ -102,7 +148,6 @@ export function initSentry(): void {
             }
           }
 
-          // Scrub exception values
           if (event.exception?.values) {
             for (const exc of event.exception.values) {
               if (typeof exc.value === 'string') {
@@ -111,7 +156,6 @@ export function initSentry(): void {
             }
           }
 
-          // Scrub breadcrumbs
           if (event.breadcrumbs) {
             for (const bc of event.breadcrumbs) {
               if (typeof bc.message === 'string') {
@@ -123,7 +167,6 @@ export function initSentry(): void {
             }
           }
 
-          // Scrub extra, contexts, tags
           for (const section of ['extra', 'contexts', 'tags'] as const) {
             const val = (event as Record<string, unknown>)[section];
             if (val && typeof val === 'object') {
@@ -131,20 +174,24 @@ export function initSentry(): void {
             }
           }
 
-          // Scrub user
           if (event.user && typeof event.user === 'object') {
             event.user = scrubDict(event.user as Record<string, unknown>) as Record<string, string>;
           }
 
           return event;
         },
-        integrations: [
-          Sentry.browserTracingIntegration(),
-        ],
         maxBreadcrumbs: 50,
       });
 
-      console.log(`[sentry] Initialized: environment=${import.meta.env.MODE}`);
+      if (typeof window !== 'undefined') {
+        Sentry.setTag('route', window.location.pathname);
+        Sentry.setContext('app', {
+          build_target: 'vite',
+          hostname: window.location.hostname,
+        });
+      }
+
+      console.log(`[sentry] Initialized: environment=${environment} release=${release}`);
     })
     .catch(() => {
       // @sentry/react not installed — silent no-op

@@ -222,6 +222,52 @@ export interface OpsDashboardMetricsResponse {
   server_time: string;
 }
 
+export interface OpsSentrySummary {
+  configured: boolean;
+  source: 'sentry' | 'disabled' | 'unavailable';
+  status: 'healthy' | 'degraded' | 'critical' | 'disabled' | 'unavailable';
+  open_issue_count: number;
+  critical_count: number;
+  regression_count: number;
+  project_count: number;
+  last_seen: string | null;
+  issues_url: string | null;
+  alerts_url: string | null;
+  warnings: string[];
+}
+
+export interface OpsSentryIssue {
+  id: string;
+  short_id: string;
+  title: string;
+  level: string;
+  status: string;
+  count: number;
+  user_count: number;
+  first_seen: string | null;
+  last_seen: string | null;
+  project_slug: string;
+  project_name: string;
+  culprit: string;
+  permalink: string;
+  is_regression: boolean;
+  is_unhandled: boolean;
+}
+
+export interface OpsSentrySummaryResponse {
+  summary: OpsSentrySummary;
+  server_time: string;
+}
+
+export interface OpsSentryIssuesResponse {
+  items: OpsSentryIssue[];
+  count: number;
+  configured: boolean;
+  source: string;
+  warnings: string[];
+  server_time: string;
+}
+
 // ============================================================================
 // CLIENT
 // ============================================================================
@@ -582,6 +628,19 @@ export async function fetchOpsDeepHealth(): Promise<OpsDeepHealthResponse> {
 /** GET /admin/ops/dashboard/metrics — aggregated dashboard metrics */
 export async function fetchOpsDashboardMetrics(): Promise<OpsDashboardMetricsResponse> {
   return opsFetch<OpsDashboardMetricsResponse>('/admin/ops/dashboard/metrics');
+}
+
+export async function fetchOpsSentrySummary(): Promise<OpsSentrySummaryResponse> {
+  return opsFetch<OpsSentrySummaryResponse>('/admin/ops/sentry/summary');
+}
+
+export async function fetchOpsSentryIssues(params?: {
+  limit?: number;
+}): Promise<OpsSentryIssuesResponse> {
+  const search = new URLSearchParams();
+  if (params?.limit) search.set('limit', String(params.limit));
+  const qs = search.toString();
+  return opsFetch<OpsSentryIssuesResponse>(`/admin/ops/sentry/issues${qs ? `?${qs}` : ''}`);
 }
 
 /** Check if the ops facade backend is reachable */
