@@ -182,4 +182,21 @@ describe('opsFacadeClient admin token refresh', () => {
       }),
     );
   });
+
+  it('does not hit protected ops endpoints when admin token minting fails', async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: null },
+      error: null,
+    });
+
+    const { fetchOpsSentrySummary, OpsFacadeError } = await import('./opsFacadeClient');
+
+    await expect(fetchOpsSentrySummary()).rejects.toEqual(
+      expect.objectContaining<Partial<OpsFacadeError>>({
+        code: 'AUTH_REQUIRED',
+        status: 401,
+      }),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

@@ -391,11 +391,23 @@ async function tryEnsureAdminToken(forceRefresh = false): Promise<string> {
   }
 }
 
+async function parseOpsErrorResponse(response: Response): Promise<OpsError> {
+  return response.json().catch(() => ({
+    code: 'FETCH_ERROR',
+    message: `HTTP ${response.status}: ${response.statusText}`,
+    correlation_id: 'unknown',
+    retryable: response.status >= 500,
+  }));
+}
+
 async function opsFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const shouldAttachAdminToken = !OPS_PUBLIC_PATHS.has(path);
 
   if (shouldAttachAdminToken && !getAdminToken()) {
-    await tryEnsureAdminToken();
+    const mintedToken = await tryEnsureAdminToken();
+    if (!mintedToken) {
+      throw new OpsFacadeError('Admin session not available', 'AUTH_REQUIRED', 401);
+    }
   }
 
   let response = await fetch(buildOpsFacadeUrl(path), {
@@ -407,26 +419,24 @@ async function opsFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (shouldAttachAdminToken && response.status === 401) {
+    const authError = await parseOpsErrorResponse(response);
     clearToken();
     const refreshedToken = await tryEnsureAdminToken(true);
-    if (refreshedToken) {
-      response = await fetch(buildOpsFacadeUrl(path), {
-        ...init,
-        headers: {
-          ...buildOpsHeaders(),
-          ...(init?.headers as Record<string, string> ?? {}),
-        },
-      });
+    if (!refreshedToken) {
+      throw new OpsFacadeError(authError.message, authError.code, response.status);
     }
+
+    response = await fetch(buildOpsFacadeUrl(path), {
+      ...init,
+      headers: {
+        ...buildOpsHeaders(),
+        ...(init?.headers as Record<string, string> ?? {}),
+      },
+    });
   }
 
   if (!response.ok) {
-    const error: OpsError = await response.json().catch(() => ({
-      code: 'FETCH_ERROR',
-      message: `HTTP ${response.status}: ${response.statusText}`,
-      correlation_id: 'unknown',
-      retryable: response.status >= 500,
-    }));
+    const error = await parseOpsErrorResponse(response);
     throw new OpsFacadeError(error.message, error.code, response.status);
   }
 
