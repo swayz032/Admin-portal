@@ -344,7 +344,8 @@ export default function Auth() {
       setAttempts(0);
       setLockoutUntil(null);
       saveLockoutState({ attempts: 0, lockoutUntil: null });
-      navigate('/home');
+      // Let the route guards transition once AuthContext has finished hydrating.
+      return;
     } catch {
       setError('An unexpected error occurred. Please try again.');
       setIsLoading(false);
@@ -373,7 +374,6 @@ export default function Auth() {
         });
         if (!setSessionError) {
           await logAuthEvent('signup_success', { email: sanitizedEmail });
-          navigate('/home');
           return;
         }
       }

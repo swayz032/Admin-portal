@@ -7,9 +7,11 @@ interface PublicRouteProps {
 }
 
 export function PublicRoute({ children }: PublicRouteProps) {
-  const { session, loading, mfaRequired } = useAuth();
+  const { user, session, loading, mfaRequired } = useAuth();
 
-  if (loading) {
+  // Hold public routes in a loading state while Supabase has produced a session
+  // but AuthContext has not finished hydrating the user/sessionInfo yet.
+  if (loading || (session && !user)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
