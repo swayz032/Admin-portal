@@ -267,6 +267,8 @@ export default function Auth() {
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [focused, setFocused] = useState<string | null>(null);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const [loginInputsUnlocked, setLoginInputsUnlocked] = useState(false);
+  const [signupInputsUnlocked, setSignupInputsUnlocked] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
   const title = useScramble('Aspire Admin Portal', true);
@@ -296,7 +298,12 @@ export default function Auth() {
     setMode(newMode);
     setError(null);
     setInfo(null);
+    setLoginInputsUnlocked(false);
+    setSignupInputsUnlocked(false);
   };
+
+  const unlockLoginInputs = useCallback(() => setLoginInputsUnlocked(true), []);
+  const unlockSignupInputs = useCallback(() => setSignupInputsUnlocked(true), []);
 
   // --- 3D Tilt ---
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -421,6 +428,15 @@ export default function Auth() {
     letterSpacing: '0.07em',
     marginBottom: 6,
     fontFamily: 'inherit',
+  };
+
+  const autofillTrap: React.CSSProperties = {
+    position: 'absolute',
+    left: '-9999px',
+    width: 1,
+    height: 1,
+    opacity: 0,
+    pointerEvents: 'none',
   };
 
   return (
@@ -624,32 +640,74 @@ export default function Auth() {
 
                 {/* Sign In Form */}
                 {mode === 'signin' && (
-                  <form onSubmit={handleLogin}>
+                  <form
+                    onSubmit={handleLogin}
+                    autoComplete="off"
+                    data-1p-ignore="true"
+                    data-lpignore="true"
+                    data-form-type="other"
+                  >
+                    <input
+                      type="text"
+                      name="admin-username-trap"
+                      autoComplete="username"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      style={autofillTrap}
+                    />
+                    <input
+                      type="password"
+                      name="admin-password-trap"
+                      autoComplete="current-password"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      style={autofillTrap}
+                    />
                     <label style={lbl}>Email</label>
                     <input
                       type="email"
+                      name="admin-email"
                       placeholder="admin@aspire.ai"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      onFocus={() => setFocused('email')}
+                      onPointerDown={unlockLoginInputs}
+                      onFocus={() => {
+                        unlockLoginInputs();
+                        setFocused('email');
+                      }}
                       onBlur={() => setFocused(null)}
                       disabled={isLoading || isLockedOut}
                       required
-                      autoComplete="email"
+                      inputMode="email"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      autoComplete="off"
+                      readOnly={!loginInputsUnlocked}
+                      data-1p-ignore="true"
+                      data-lpignore="true"
                       style={inp('email')}
                     />
 
                     <label style={lbl}>Password</label>
                     <input
                       type="password"
+                      name="admin-password"
                       placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      onFocus={() => setFocused('password')}
+                      onPointerDown={unlockLoginInputs}
+                      onFocus={() => {
+                        unlockLoginInputs();
+                        setFocused('password');
+                      }}
                       onBlur={() => setFocused(null)}
                       disabled={isLoading || isLockedOut}
                       required
-                      autoComplete="current-password"
+                      autoComplete="new-password"
+                      readOnly={!loginInputsUnlocked}
+                      data-1p-ignore="true"
+                      data-lpignore="true"
                       style={inp('password')}
                     />
 
@@ -712,47 +770,97 @@ export default function Auth() {
 
                 {/* Sign Up Form */}
                 {mode === 'signup' && (
-                  <form onSubmit={handleSignup}>
+                  <form
+                    onSubmit={handleSignup}
+                    autoComplete="off"
+                    data-1p-ignore="true"
+                    data-lpignore="true"
+                    data-form-type="other"
+                  >
+                    <input
+                      type="text"
+                      name="admin-signup-username-trap"
+                      autoComplete="username"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      style={autofillTrap}
+                    />
+                    <input
+                      type="password"
+                      name="admin-signup-password-trap"
+                      autoComplete="new-password"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      style={autofillTrap}
+                    />
                     <label style={lbl}>Invite Code</label>
                     <input
                       type="text"
+                      name="admin-invite-code"
                       placeholder="Private beta invite code"
                       value={inviteCode}
                       onChange={(e) => setInviteCode(e.target.value)}
-                      onFocus={() => setFocused('invite')}
+                      onPointerDown={unlockSignupInputs}
+                      onFocus={() => {
+                        unlockSignupInputs();
+                        setFocused('invite');
+                      }}
                       onBlur={() => setFocused(null)}
                       disabled={isLoading}
                       required
                       autoComplete="off"
+                      readOnly={!signupInputsUnlocked}
+                      data-1p-ignore="true"
+                      data-lpignore="true"
                       style={inp('invite')}
                     />
 
                     <label style={lbl}>Email</label>
                     <input
                       type="email"
+                      name="admin-signup-email"
                       placeholder="you@company.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      onFocus={() => setFocused('signup-email')}
+                      onPointerDown={unlockSignupInputs}
+                      onFocus={() => {
+                        unlockSignupInputs();
+                        setFocused('signup-email');
+                      }}
                       onBlur={() => setFocused(null)}
                       disabled={isLoading}
                       required
-                      autoComplete="email"
+                      inputMode="email"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      autoComplete="off"
+                      readOnly={!signupInputsUnlocked}
+                      data-1p-ignore="true"
+                      data-lpignore="true"
                       style={inp('signup-email')}
                     />
 
                     <label style={lbl}>Password</label>
                     <input
                       type="password"
+                      name="admin-signup-password"
                       placeholder="Min. 8 characters"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      onFocus={() => setFocused('signup-password')}
+                      onPointerDown={unlockSignupInputs}
+                      onFocus={() => {
+                        unlockSignupInputs();
+                        setFocused('signup-password');
+                      }}
                       onBlur={() => setFocused(null)}
                       disabled={isLoading}
                       required
                       minLength={8}
                       autoComplete="new-password"
+                      readOnly={!signupInputsUnlocked}
+                      data-1p-ignore="true"
+                      data-lpignore="true"
                       style={inp('signup-password')}
                     />
 
