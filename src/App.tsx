@@ -37,6 +37,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 // Command Center pages
 const SystemHealth = lazy(() => import("./pages/SystemHealth"));
 const Metrics = lazy(() => import("./pages/Metrics"));
+const DatabasePerformance = lazy(() => import("./pages/DatabasePerformance"));
 const N8nOperations = lazy(() => import("./pages/N8nOperations"));
 
 // Trust Spine pages
@@ -274,6 +275,16 @@ const App = () => (
                   <ProtectedRoute>
                     <AppLayout>
                       <Metrics />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/db-performance"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <DatabasePerformance />
                     </AppLayout>
                   </ProtectedRoute>
                 }
