@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { OperatorEngineerToggle } from '@/components/shared/OperatorEngineerToggle';
 import { GlobalSearch } from '@/components/header/GlobalSearch';
 import { ErrorNotificationBadge } from '@/components/admin-ava/ErrorNotificationBadge';
+import { OnlineAdmins } from '@/components/header/OnlineAdmins';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -72,6 +73,9 @@ export function Header({ onMenuClick }: HeaderProps) {
           </TooltipContent>
         </Tooltip>
         
+        {/* Online Admins Presence Indicator */}
+        <OnlineAdmins />
+
         <Button variant="ghost" size="icon" className="relative h-9 w-9">
           <Bell className="h-4 w-4 text-muted-foreground" />
           <ErrorNotificationBadge criticalOnly className="absolute -top-0.5 -right-0.5" />

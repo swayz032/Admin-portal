@@ -8,6 +8,7 @@ import { ProviderAlertBanner } from '@/components/admin-ava/ProviderAlertBanner'
 import { SystemStatusBanner } from '@/components/shared/SystemStatusBanner';
 import { useRealtimeApprovals } from '@/hooks/useRealtimeApprovals';
 import { useRealtimeIncidents } from '@/hooks/useRealtimeIncidents';
+import { useRedAlertBroadcast } from '@/hooks/useRedAlertBroadcast';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -31,7 +32,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   // Real Supabase data for Ava notification counts
   const { data: allApprovals } = useRealtimeApprovals({ status: 'Pending' });
   const { data: allIncidents } = useRealtimeIncidents({ status: 'Open' });
-  const avaNotifications = allApprovals.length + allIncidents.length;
+  const { alerts: redAlerts } = useRedAlertBroadcast();
+  const avaNotifications = allApprovals.length + allIncidents.length + redAlerts.length;
 
   return (
     <div className="min-h-screen flex w-full bg-background">
