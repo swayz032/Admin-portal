@@ -61,6 +61,7 @@ export default function DatabasePerformance() {
   const [receiptStats, setReceiptStats] = useState<ReceiptDailyStat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [partialErrors, setPartialErrors] = useState<string[]>([]);
   const mountedRef = useRef(true);
 
   const fetchData = useCallback(async () => {
@@ -75,27 +76,40 @@ export default function DatabasePerformance() {
 
       if (!mountedRef.current) return;
 
+      const errors: string[] = [];
+
       if (cacheRes.status === 'fulfilled' && !cacheRes.value.error) {
         const rows = cacheRes.value.data as Array<{ cache_hit_pct: number }>;
         setCacheHitPct(rows?.[0]?.cache_hit_pct ?? null);
+      } else {
+        errors.push('Cache hit rate');
       }
 
       if (queriesRes.status === 'fulfilled' && !queriesRes.value.error) {
         setSlowQueries((queriesRes.value.data as SlowQuery[]) ?? []);
+      } else {
+        errors.push('Slow queries');
       }
 
       if (jobsRes.status === 'fulfilled' && !jobsRes.value.error) {
         setCronJobs((jobsRes.value.data as CronJob[]) ?? []);
+      } else {
+        errors.push('Cron jobs');
       }
 
       if (historyRes.status === 'fulfilled' && !historyRes.value.error) {
         setCronHistory((historyRes.value.data as CronRun[]) ?? []);
+      } else {
+        errors.push('Cron history');
       }
 
       if (statsRes.status === 'fulfilled' && !statsRes.value.error) {
         setReceiptStats((statsRes.value.data as ReceiptDailyStat[]) ?? []);
+      } else {
+        errors.push('Receipt stats');
       }
 
+      setPartialErrors(errors);
       setError(null);
     } catch (err) {
       if (mountedRef.current) {
@@ -175,6 +189,14 @@ export default function DatabasePerformance() {
           Refresh
         </Button>
       </div>
+
+      {/* Partial failure banner */}
+      {partialErrors.length > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-2.5 text-sm text-amber-600 dark:text-amber-400">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>Failed to load: {partialErrors.join(', ')}. Other data shown below.</span>
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">

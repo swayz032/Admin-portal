@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { devWarn } from "@/lib/devLog";
 import { fetchOpsDashboardMetrics, fetchOpsSentrySummary } from "@/services/opsFacadeClient";
 
 type SystemStatus = "healthy" | "degraded" | "critical";
@@ -39,7 +40,7 @@ async function deriveStatusFromSupabase(): Promise<SystemStatus> {
     .in("status", ["FAILED", "DENIED"]);
 
   if (error) {
-    console.warn("[SystemStatusBanner] Supabase receipts query failed:", error.message);
+    devWarn("[SystemStatusBanner] Supabase receipts query failed:", error.message);
     return "healthy";
   }
 

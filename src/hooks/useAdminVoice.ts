@@ -22,6 +22,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 import { useElevenLabsSTT } from './useElevenLabsSTT';
+import { devWarn } from '@/lib/devLog';
 
 export type VoiceOrbState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
@@ -102,7 +103,7 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
 
       if (!response.ok) {
         const detail = await response.text().catch(() => '');
-        console.warn('[AdminVoice] TTS stream error:', response.status, detail);
+        devWarn('[AdminVoice] TTS stream error:', response.status, detail);
         return;
       }
 
@@ -110,7 +111,7 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
 
       // Validate we got actual audio data
       if (audioBytes.byteLength < 100) {
-        console.warn('[AdminVoice] TTS returned empty/tiny audio');
+        devWarn('[AdminVoice] TTS returned empty/tiny audio');
         return;
       }
 
@@ -139,7 +140,7 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
       });
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
-      console.warn('[AdminVoice] TTS playback failed:', err);
+      devWarn('[AdminVoice] TTS playback failed:', err);
     } finally {
       currentAudioSourceRef.current = null;
     }

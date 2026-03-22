@@ -11,6 +11,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { devWarn, devLog } from '@/lib/devLog';
 
 export interface RedAlert {
   receiptId: string;
@@ -49,7 +50,7 @@ export function useRedAlertBroadcast(): UseRedAlertBroadcastResult {
         if (disposed) return;
         const data = payload.payload as Record<string, unknown>;
         if (!data || typeof data.receipt_id !== 'string' || !data.receipt_id) {
-          console.warn('[RedAlerts] Ignoring malformed broadcast payload:', data);
+          devWarn('[RedAlerts] Ignoring malformed broadcast payload:', data);
           return;
         }
         const alert: RedAlert = {
@@ -73,7 +74,7 @@ export function useRedAlertBroadcast(): UseRedAlertBroadcastResult {
         if (disposed) return;
         setIsConnected(status === 'SUBSCRIBED');
         if (status === 'SUBSCRIBED') {
-          console.log('[RedAlerts] Connected to broadcast channel');
+          devLog('[RedAlerts] Connected to broadcast channel');
         }
       });
 

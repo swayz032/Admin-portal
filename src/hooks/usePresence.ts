@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { devLog } from '@/lib/devLog';
 
 export interface PresenceUser {
   userId: string;
@@ -61,11 +62,11 @@ export function usePresence(channelName = 'admin-portal'): UsePresenceResult {
           if (!disposed) syncPresence();
         })
         .on('presence', { event: 'join' }, ({ newPresences }) => {
-          console.log('[Presence] User joined:', newPresences);
+          devLog('[Presence] User joined:', newPresences);
           if (!disposed) syncPresence();
         })
         .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-          console.log('[Presence] User left:', leftPresences);
+          devLog('[Presence] User left:', leftPresences);
           if (!disposed) syncPresence();
         })
         .subscribe(async (status) => {

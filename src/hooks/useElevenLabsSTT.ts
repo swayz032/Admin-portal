@@ -19,6 +19,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
+import { devLog } from '@/lib/devLog';
 
 /** Silence threshold in seconds before auto-submitting speech */
 const SILENCE_THRESHOLD_S = 1.8;
@@ -272,7 +273,7 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
 
       // Session-level silence timeout (auto-pause after 60s of no speech)
       sessionSilenceTimerRef.current = setTimeout(() => {
-        console.log('[STT] Session silence timeout — no speech for 60s');
+        devLog('[STT] Session silence timeout — no speech for 60s');
         setIsListening(false);
         cleanupAudio();
       }, SESSION_SILENCE_TIMEOUT_MS);
@@ -293,7 +294,7 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
       clearTimeout(sessionSilenceTimerRef.current);
     }
     sessionSilenceTimerRef.current = setTimeout(() => {
-      console.log('[STT] Session silence timeout — no speech for 60s');
+      devLog('[STT] Session silence timeout — no speech for 60s');
       setIsListening(false);
       cleanupAudio();
     }, SESSION_SILENCE_TIMEOUT_MS);
