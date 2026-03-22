@@ -90,6 +90,7 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
       setOrbState('speaking');
 
       const controller = new AbortController();
+      abortControllerRef.current = controller;
       const response = await fetch(buildOpsFacadeUrl('/admin/ops/voice/tts/stream'), {
         method: 'POST',
         headers: {

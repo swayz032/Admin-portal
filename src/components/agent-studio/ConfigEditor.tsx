@@ -1,13 +1,15 @@
 import { useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { useSystem } from '@/contexts/SystemContext';
-import type { 
-  StaffMember, 
-  StaffRuntimeConfig, 
+import type {
+  StaffMember,
+  StaffRuntimeConfig,
   ToolCatalogEntry,
   ProviderDef,
   SkillpackRef,
-  RiskLevel
+  RiskLevel,
+  ApprovalMode,
+  RolloutState,
 } from '@/contracts/ecosystem';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -500,7 +502,7 @@ export function ConfigEditor({
                               value={rule.approval_mode}
                               onValueChange={(value) => {
                                 const newRules = [...config.approval_rules];
-                                newRules[idx] = { ...rule, approval_mode: value as any };
+                                newRules[idx] = { ...rule, approval_mode: value as ApprovalMode };
                                 onConfigChange({ ...config, approval_rules: newRules });
                               }}
                             >
@@ -708,7 +710,7 @@ export function ConfigEditor({
                       value={config.rollout_state}
                       onValueChange={(value) => onConfigChange({ 
                         ...config, 
-                        rollout_state: value as any 
+                        rollout_state: value as RolloutState
                       })}
                     >
                       <SelectTrigger className="w-36 h-9 text-xs">

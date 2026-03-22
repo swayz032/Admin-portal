@@ -274,6 +274,7 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
       sessionSilenceTimerRef.current = setTimeout(() => {
         console.log('[STT] Session silence timeout — no speech for 60s');
         setIsListening(false);
+        cleanupAudio();
       }, SESSION_SILENCE_TIMEOUT_MS);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Microphone access denied';
@@ -294,11 +295,12 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
     sessionSilenceTimerRef.current = setTimeout(() => {
       console.log('[STT] Session silence timeout — no speech for 60s');
       setIsListening(false);
+      cleanupAudio();
     }, SESSION_SILENCE_TIMEOUT_MS);
 
     startRecordingSegment();
     setIsListening(true);
-  }, [startRecordingSegment]);
+  }, [startRecordingSegment, cleanupAudio]);
 
   // Full stop: tear down everything
   const stopListening = useCallback(() => {
