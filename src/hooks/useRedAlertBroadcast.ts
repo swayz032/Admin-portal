@@ -35,6 +35,8 @@ export function useRedAlertBroadcast(): UseRedAlertBroadcastResult {
   const [isConnected, setIsConnected] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const { toast } = useToast();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
 
   const clearAlerts = useCallback(() => setAlerts([]), []);
 
@@ -46,18 +48,22 @@ export function useRedAlertBroadcast(): UseRedAlertBroadcastResult {
       .on('broadcast', { event: 'new_red_receipt' }, (payload) => {
         if (disposed) return;
         const data = payload.payload as Record<string, unknown>;
+        if (!data || typeof data.receipt_id !== 'string' || !data.receipt_id) {
+          console.warn('[RedAlerts] Ignoring malformed broadcast payload:', data);
+          return;
+        }
         const alert: RedAlert = {
-          receiptId: (data.receipt_id as string) || '',
-          receiptType: (data.receipt_type as string) || '',
+          receiptId: data.receipt_id,
+          receiptType: (data.receipt_type as string) || 'unknown',
           tenantId: (data.tenant_id as string) || '',
           actorId: (data.actor_id as string) || '',
-          status: (data.status as string) || '',
+          status: (data.status as string) || 'unknown',
           receivedAt: new Date().toISOString(),
         };
 
         setAlerts((prev) => [alert, ...prev].slice(0, MAX_ALERTS));
 
-        toast({
+        toastRef.current({
           variant: 'destructive',
           title: 'RED Alert: Critical Receipt',
           description: `${alert.receiptType} — ${alert.status} (${alert.actorId})`,
@@ -81,7 +87,7 @@ export function useRedAlertBroadcast(): UseRedAlertBroadcastResult {
         channelRef.current = null;
       }
     };
-  }, [toast]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- toast via ref
 
   return {
     alerts,

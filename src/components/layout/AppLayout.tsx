@@ -19,8 +19,12 @@ const SIDEBAR_COLLAPSED_KEY = 'aspire_sidebar_collapsed';
 export function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
-    return stored ? JSON.parse(stored) : false;
+    try {
+      const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+      return stored ? JSON.parse(stored) === true : false;
+    } catch {
+      return false;
+    }
   });
   const { systemState } = useSystem();
 
