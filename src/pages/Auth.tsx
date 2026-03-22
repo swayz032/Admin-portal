@@ -329,7 +329,7 @@ export default function Auth() {
     }
     const sanitizedEmail = email.trim().toLowerCase();
     const result = loginSchema.safeParse({ email: sanitizedEmail, password });
-    if (!result.success) { setError(result.error.errors[0].message); return; }
+    if (!result.success) { setError(result.error.errors[0]?.message ?? 'Invalid input'); return; }
     setIsLoading(true);
     try {
       const { error: authError } = await signIn(sanitizedEmail, password);
@@ -366,7 +366,7 @@ export default function Auth() {
     setInfo(null);
     const sanitizedEmail = email.trim().toLowerCase();
     const result = signupSchema.safeParse({ email: sanitizedEmail, password, inviteCode: inviteCode.trim() });
-    if (!result.success) { setError(result.error.errors[0].message); return; }
+    if (!result.success) { setError(result.error.errors[0]?.message ?? 'Invalid input'); return; }
     setIsLoading(true);
     try {
       const { data, error: fnError } = await supabase.functions.invoke('admin-signup', {
