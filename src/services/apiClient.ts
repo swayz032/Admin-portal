@@ -159,10 +159,10 @@ export async function fetchIncidents(filters?: {
     .limit(5000);
 
   if (error) {
-    console.error('[fetchIncidents] Supabase error:', error.message, error.code, error.details);
+    devWarn('[fetchIncidents] Supabase error:', error.message, error.code, error.details);
     throw new ApiError(`Failed to fetch incidents: ${error.message}`, error.code);
   }
-  console.log(`[fetchIncidents] Raw failure rows: ${data?.length ?? 0}, view: ${filters?.view ?? 'grouped'}`);
+  devWarn(`[fetchIncidents] Raw failure rows: ${data?.length ?? 0}, view: ${filters?.view ?? 'grouped'}`);
 
   // Aggregate by fingerprint key: receipt_type + action_type + status
   const groups = new Map<string, {
@@ -211,7 +211,7 @@ export async function fetchIncidents(filters?: {
     if (filters?.severity) {
       allIncidents = allIncidents.filter(i => i.severity === filters.severity);
     }
-    console.log(`[fetchIncidents] All-events view: ${allIncidents.length} individual incidents`);
+    devWarn(`[fetchIncidents] All-events view: ${allIncidents.length} individual incidents`);
     return { data: allIncidents, count: allIncidents.length, page: 1, pageSize: allIncidents.length };
   }
 
@@ -253,7 +253,7 @@ export async function fetchIncidents(filters?: {
   }
 
   // Return ALL aggregated groups (typically 20-80 groups from ~2000 raw rows)
-  console.log(`[fetchIncidents] Grouped view: ${incidents.length} groups from ${data?.length ?? 0} raw rows`);
+  devWarn(`[fetchIncidents] Grouped view: ${incidents.length} groups from ${data?.length ?? 0} raw rows`);
   return {
     data: incidents,
     count: incidents.length,

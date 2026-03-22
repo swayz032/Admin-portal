@@ -97,7 +97,11 @@ export async function listRegistryItems(filters?: RegistryFilters): Promise<Regi
     query = query.eq('risk_tier', dbTier);
   }
   if (filters?.search) {
-    query = query.or(`name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
+    // Sanitize search input to prevent PostgREST filter injection (Law #9)
+    const sanitized = filters.search.replace(/[%_(),.'"\\]/g, '');
+    if (sanitized) {
+      query = query.or(`name.ilike.%${sanitized}%,description.ilike.%${sanitized}%`);
+    }
   }
 
   const { data, error } = await query.order('created_at', { ascending: false });

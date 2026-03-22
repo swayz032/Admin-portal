@@ -137,7 +137,11 @@ export default function ClientEvents() {
       if (sourceFilter !== 'all') query = query.eq('source', sourceFilter);
       if (severityFilter !== 'all') query = query.eq('severity', severityFilter);
       if (eventTypeFilter !== 'all') query = query.eq('event_type', eventTypeFilter);
-      if (searchTerm) query = query.or(`message.ilike.%${searchTerm}%,correlation_id.ilike.%${searchTerm}%`);
+      if (searchTerm) {
+        // Sanitize search input to prevent PostgREST filter injection (Law #9)
+        const sanitized = searchTerm.replace(/[%_(),.'"\\]/g, '');
+        if (sanitized) query = query.or(`message.ilike.%${sanitized}%,correlation_id.ilike.%${sanitized}%`);
+      }
       if (dateFrom) query = query.gte('created_at', dateFrom);
       if (dateTo) query = query.lte('created_at', dateTo);
 
