@@ -303,7 +303,11 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
   // ── Barge-in: if user speaks while TTS is playing, interrupt ───────
   useEffect(() => {
     if (stt.isSpeechDetected && orbState === 'speaking' && isSessionActive) {
+      // Abort in-flight TTS fetch so server stops sending audio
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
       stopPlayback();
+      isProcessingRef.current = false;
       setOrbState('listening');
     }
   }, [stt.isSpeechDetected, orbState, isSessionActive, stopPlayback]);
@@ -311,6 +315,7 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
   // ── Cleanup on unmount ─────────────────────────────────────────────
   useEffect(() => {
     return () => {
+      sttRef.current.stopListening();
       abortControllerRef.current?.abort();
       stopPlayback();
       if (audioContextRef.current?.state !== 'closed') {

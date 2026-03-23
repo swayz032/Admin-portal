@@ -8,16 +8,18 @@
  * Auto-attaches context and prefills Ava prompt on mount.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { OpsDeskProvider, useOpsDesk } from '@/contexts/OpsDeskContext';
 import { AdminAvaChatProvider, useAdminAvaChat } from '@/contexts/AdminAvaChatContext';
 import { ChatThread } from '@/components/admin-ava/ChatThread';
+import { VoiceModal } from '@/components/admin-ava/VoiceModal';
 
 function ChatWithDeepLinks() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { addAttachment } = useOpsDesk();
   const { sendMessage } = useAdminAvaChat();
+  const [voiceAutoOpen, setVoiceAutoOpen] = useState(true);
 
   useEffect(() => {
     const incidentId = searchParams.get('incidentId');
@@ -56,6 +58,7 @@ function ChatWithDeepLinks() {
   return (
     <div className="h-[calc(100vh-64px)] bg-background">
       <ChatThread />
+      <VoiceModal open={voiceAutoOpen} onClose={() => setVoiceAutoOpen(false)} />
     </div>
   );
 }
