@@ -66,13 +66,7 @@ export function VoiceModal({ open, onClose }: VoiceModalProps) {
     return () => cancelAnimationFrame(raf);
   }, [open]);
 
-  // Auto-start session when modal opens
-  useEffect(() => {
-    if (open && !voice.isSessionActive) {
-      voice.startSession();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  // User must click mic to start — no auto-start (Bug 6B fix)
 
   const handleClose = () => {
     voice.endSession();

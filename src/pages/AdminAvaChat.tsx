@@ -19,7 +19,7 @@ function ChatWithDeepLinks() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { addAttachment } = useOpsDesk();
   const { sendMessage } = useAdminAvaChat();
-  const [voiceAutoOpen, setVoiceAutoOpen] = useState(true);
+  const [voiceAutoOpen, setVoiceAutoOpen] = useState(false);
 
   useEffect(() => {
     const incidentId = searchParams.get('incidentId');

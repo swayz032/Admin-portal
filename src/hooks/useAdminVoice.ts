@@ -63,6 +63,9 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
   const sessionActiveRef = useRef(false);
   const isMutedRef = useRef(false);
 
+  // Bug 6E: Track voice conversation history for multi-turn context
+  const voiceHistoryRef = useRef<{role: string; content: string}[]>([]);
+
   const stt = useElevenLabsSTT();
   const sttRef = useRef(stt);
   sttRef.current = stt;
@@ -182,6 +185,7 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     isProcessingRef.current = false;
+    voiceHistoryRef.current = [];
 
     setIsSessionActive(false);
     setOrbState('idle');
@@ -218,6 +222,7 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
           },
           body: JSON.stringify({
             message: stt.transcript,
+            history: voiceHistoryRef.current.slice(-20),
             context: { channel: 'admin_voice' },
           }),
           signal: controller.signal,
@@ -263,6 +268,17 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
 
         const finalText = responseContent || "I'm ready for your next step.";
         setLastAvaResponse(finalText);
+
+        // Bug 6E: Track conversation turns for multi-turn context
+        voiceHistoryRef.current.push(
+          { role: 'user', content: stt.transcript },
+          { role: 'assistant', content: finalText },
+        );
+        // Cap at 40 entries (20 exchanges)
+        if (voiceHistoryRef.current.length > 40) {
+          voiceHistoryRef.current = voiceHistoryRef.current.slice(-40);
+        }
+
         sttRef.current.clearTranscript();
 
         // Play TTS (awaits completion for continuous loop)
@@ -300,15 +316,31 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stt.transcript, isSessionActive, playTtsAudio]);
 
-  // ── Barge-in: if user speaks while TTS is playing, interrupt ───────
+  // ── Barge-in: debounced — only interrupt if speech sustained >300ms (Bug 6C fix) ──
+  const bargeInTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (stt.isSpeechDetected && orbState === 'speaking' && isSessionActive) {
-      // Abort in-flight TTS fetch so server stops sending audio
-      abortControllerRef.current?.abort();
-      abortControllerRef.current = null;
-      stopPlayback();
-      isProcessingRef.current = false;
-      setOrbState('listening');
+      // Start debounce timer — only barge-in after 300ms continuous speech
+      if (!bargeInTimerRef.current) {
+        bargeInTimerRef.current = setTimeout(() => {
+          bargeInTimerRef.current = null;
+          // Re-check conditions after debounce
+          if (sessionActiveRef.current) {
+            abortControllerRef.current?.abort();
+            abortControllerRef.current = null;
+            stopPlayback();
+            isProcessingRef.current = false;
+            setOrbState('listening');
+          }
+        }, 300);
+      }
+    } else {
+      // Speech stopped or state changed — cancel pending barge-in
+      if (bargeInTimerRef.current) {
+        clearTimeout(bargeInTimerRef.current);
+        bargeInTimerRef.current = null;
+      }
     }
   }, [stt.isSpeechDetected, orbState, isSessionActive, stopPlayback]);
 
