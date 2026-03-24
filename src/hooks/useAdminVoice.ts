@@ -109,6 +109,11 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
     try {
       setOrbState('speaking');
 
+      // Mute mic during TTS to prevent echo from triggering false barge-in.
+      // Even with echoCancellation, speakers can leak enough audio to trigger
+      // the 300ms barge-in threshold and cut off Ava's own speech.
+      sttRef.current.muteMic?.(true);
+
       const controller = new AbortController();
       abortControllerRef.current = controller;
       const response = await fetch(buildOpsFacadeUrl('/admin/ops/voice/tts/stream'), {
@@ -145,6 +150,9 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
       devWarn('[AdminVoice] TTS playback failed:', err);
+    } finally {
+      // Unmute mic after TTS finishes so user can speak again
+      sttRef.current.muteMic?.(false);
     }
   }, []);
 

@@ -273,6 +273,18 @@ export default function Auth() {
 
   const title = useScramble('Aspire Admin Portal', true);
 
+  // --- Clear stale session on mount ---
+  // Security: when user explicitly navigates to /auth (sign-in page),
+  // clear any existing Supabase session so they must re-authenticate.
+  // Prevents auto-sign-in from persisted tokens on shared devices.
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        supabase.auth.signOut().catch(() => {});
+      }
+    });
+  }, []);
+
   // --- Rate Limiting ---
   const [attempts, setAttempts] = useState<number>(() => loadLockoutState().attempts);
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(() => loadLockoutState().lockoutUntil);
@@ -351,7 +363,8 @@ export default function Auth() {
       setAttempts(0);
       setLockoutUntil(null);
       saveLockoutState({ attempts: 0, lockoutUntil: null });
-      // Let the route guards transition once AuthContext has finished hydrating.
+      // Navigate to home after successful sign-in.
+      navigate('/home', { replace: true });
       return;
     } catch {
       setError('An unexpected error occurred. Please try again.');

@@ -48,6 +48,8 @@ export interface UseElevenLabsSTTResult {
   clearTranscript: () => void;
   /** Restart recording for the next utterance (called after TTS finishes) */
   restartForNextUtterance: () => void;
+  /** Mute/unmute mic track — used during TTS to prevent echo barge-in */
+  muteMic: (muted: boolean) => void;
 }
 
 export function useElevenLabsSTT(): UseElevenLabsSTTResult {
@@ -329,6 +331,13 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
     setInterimTranscript('');
   }, []);
 
+  // Mute/unmute the mic track — prevents TTS echo from triggering barge-in
+  const muteMic = useCallback((muted: boolean) => {
+    if (streamRef.current) {
+      streamRef.current.getAudioTracks().forEach(t => { t.enabled = !muted; });
+    }
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -348,5 +357,6 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
     stopListening,
     clearTranscript,
     restartForNextUtterance,
+    muteMic,
   };
 }

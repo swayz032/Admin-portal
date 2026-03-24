@@ -81,9 +81,12 @@ function createUnavailableClient(reason: string): SupabaseClient<Database> {
 export const supabase = supabaseConfigStatus.isValid
   ? createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
       auth: {
-        // Admin auth should not survive a full page reload or restored tab session.
-        persistSession: false,
+        // Persist session so page refresh doesn't log the user out.
+        // Security: 30min inactivity timeout + tab-hidden timeout enforce re-auth.
+        // Auth page explicitly clears session on mount to prevent auto-sign-in.
+        persistSession: true,
         autoRefreshToken: true,
+        storageKey: 'aspire-admin-auth',
       },
     })
   : createUnavailableClient(
