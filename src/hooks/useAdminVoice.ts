@@ -204,8 +204,8 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
                   pendingChunks.push(value);
                   flushPending();
 
-                  // Start playback as soon as we have enough data (~8KB)
-                  if (totalBytes > 8192 && audio.paused) {
+                  // Start playback as soon as we have enough data (~4KB)
+                  if (totalBytes > 4096 && audio.paused) {
                     audio.play().catch(() => {
                       devWarn('[AdminVoice] MSE autoplay blocked, will retry on next chunk');
                     });
@@ -393,6 +393,7 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
             message: stt.transcript,
             history: voiceHistoryRef.current.slice(-20),
             context: { channel: 'admin_voice' },
+            max_response_tokens: 300,
             user_profile: user?.displayName
               ? { owner_name: user.displayName }
               : undefined,

@@ -22,7 +22,7 @@ import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 import { devLog } from '@/lib/devLog';
 
 /** Silence threshold in seconds before auto-submitting speech */
-const SILENCE_THRESHOLD_S = 2.0;
+const SILENCE_THRESHOLD_S = 1.2;
 /** Minimum audio level (0-1) to consider as speech — raised to filter background noise */
 const SPEECH_LEVEL_THRESHOLD = 0.035;
 /** Consecutive frames above threshold required to confirm speech (~200ms at 50ms intervals) */
