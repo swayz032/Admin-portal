@@ -281,6 +281,11 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
       let totalLength = 0;
 
       while (true) {
+        // Bail if session ended while accumulating (barge-in or stop)
+        if (!sessionActiveRef.current) {
+          reader.cancel().catch(() => {});
+          return;
+        }
         const { done, value } = await reader.read();
         if (done) break;
         if (value) {
@@ -301,7 +306,13 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
         offset += chunk.length;
       }
 
-      const audioBuffer = await ctx.decodeAudioData(combined.buffer);
+      // Decode with timeout — decodeAudioData can hang on malformed MP3
+      const audioBuffer = await Promise.race([
+        ctx.decodeAudioData(combined.buffer.slice(0)),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('decodeAudioData timeout (10s)')), 10_000)
+        ),
+      ]);
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(ctx.destination);
@@ -559,15 +570,21 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
 
   // ── Barge-in: debounced — only interrupt if speech sustained >300ms (Bug 6C fix) ──
   const bargeInTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Cooldown: prevent rapid re-triggering of barge-in (1s after last fire)
+  const bargeInCooldownRef = useRef<number>(0);
 
   useEffect(() => {
     if (stt.isSpeechDetected && orbState === 'speaking' && isSessionActive) {
+      // Cooldown active — skip barge-in for 1s after last fire
+      if (Date.now() - bargeInCooldownRef.current < 1000) return;
+
       // Start debounce timer — only barge-in after 300ms continuous speech
       if (!bargeInTimerRef.current) {
         bargeInTimerRef.current = setTimeout(() => {
           bargeInTimerRef.current = null;
           // Re-check conditions after debounce
           if (sessionActiveRef.current) {
+            bargeInCooldownRef.current = Date.now();
             abortControllerRef.current?.abort();
             abortControllerRef.current = null;
             stopPlayback();
@@ -588,6 +605,11 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
   // ── Cleanup on unmount ─────────────────────────────────────────────
   useEffect(() => {
     return () => {
+      // Clear barge-in timer to prevent state update after unmount
+      if (bargeInTimerRef.current) {
+        clearTimeout(bargeInTimerRef.current);
+        bargeInTimerRef.current = null;
+      }
       sttRef.current.stopListening();
       abortControllerRef.current?.abort();
       stopPlayback();

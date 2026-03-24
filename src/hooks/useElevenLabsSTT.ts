@@ -305,6 +305,15 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
   const restartForNextUtterance = useCallback(() => {
     if (!continuousModeRef.current || !streamRef.current) return;
 
+    // Validate mic stream is still active (user may have unplugged mic)
+    const tracks = streamRef.current.getAudioTracks();
+    if (tracks.length === 0 || tracks.every(t => t.readyState === 'ended')) {
+      devLog('[STT] Mic stream ended — cannot restart recording');
+      setIsListening(false);
+      cleanupAudio();
+      return;
+    }
+
     // Reset session silence timer
     if (sessionSilenceTimerRef.current) {
       clearTimeout(sessionSilenceTimerRef.current);
