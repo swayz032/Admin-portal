@@ -20,6 +20,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 import { devLog } from '@/lib/devLog';
+import { captureVoiceException } from '@/lib/sentry';
 
 /** Silence threshold in seconds before auto-submitting speech */
 const SILENCE_THRESHOLD_S = 1.2;
@@ -136,6 +137,9 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
         setInterimTranscript('');
       }
     } catch (err) {
+      captureVoiceException(err, {
+        tags: { voice_stage: 'stt', voice_code: 'STT_SUBMIT_FAIL', provider: 'elevenlabs' },
+      });
       setError(err instanceof Error ? err.message : 'STT failed');
     } finally {
       isSubmittingRef.current = false;
@@ -295,6 +299,9 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
       }, SESSION_SILENCE_TIMEOUT_MS);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Microphone access denied';
+      captureVoiceException(err, {
+        tags: { voice_stage: 'stt', voice_code: 'STT_MIC_START_FAIL', provider: 'elevenlabs' },
+      });
       setError(msg);
       setIsListening(false);
       cleanupAudio();

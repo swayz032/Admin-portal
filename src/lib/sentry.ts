@@ -89,6 +89,39 @@ function buildTraceTargets(): Array<string | RegExp> {
  * Initialize Sentry for the React app. Call once in main.tsx before render.
  * No-op if VITE_SENTRY_DSN is not set or @sentry/react is not installed.
  */
+/**
+ * Lazily capture an exception via Sentry (safe if @sentry/react not installed).
+ * Use in hooks that can't do top-level Sentry imports.
+ */
+export function captureVoiceException(
+  error: unknown,
+  context?: { tags?: Record<string, string>; extra?: Record<string, unknown> },
+): void {
+  import('@sentry/react')
+    .then((Sentry) => {
+      Sentry.captureException(error, {
+        tags: { voice_pipeline: 'true', ...context?.tags },
+        extra: context?.extra,
+      });
+    })
+    .catch(() => { /* @sentry/react not installed */ });
+}
+
+/**
+ * Lazily add a Sentry breadcrumb (safe if @sentry/react not installed).
+ */
+export function addVoiceBreadcrumb(
+  message: string,
+  data?: Record<string, unknown>,
+  level: 'info' | 'warning' | 'error' = 'info',
+): void {
+  import('@sentry/react')
+    .then((Sentry) => {
+      Sentry.addBreadcrumb({ category: 'voice', message, data, level });
+    })
+    .catch(() => { /* @sentry/react not installed */ });
+}
+
 export function initSentry(): void {
   const dsn = import.meta.env.VITE_SENTRY_DSN;
   if (!dsn) {

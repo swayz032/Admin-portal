@@ -24,6 +24,7 @@ import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 import { useElevenLabsSTT } from './useElevenLabsSTT';
 import { useAuth } from '@/contexts/AuthContext';
 import { devWarn } from '@/lib/devLog';
+import { captureVoiceException, addVoiceBreadcrumb } from '@/lib/sentry';
 
 export type VoiceOrbState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
@@ -159,6 +160,9 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
       devWarn('[AdminVoice] TTS playback failed:', err);
+      captureVoiceException(err, {
+        tags: { voice_stage: 'tts', voice_code: 'TTS_PLAYBACK_FAIL', provider: 'elevenlabs' },
+      });
     } finally {
       // Unmute mic after TTS finishes so user can speak again
       sttRef.current.muteMic?.(false);
@@ -195,6 +199,9 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
             sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg');
           } catch (err) {
             devWarn('[AdminVoice] MSE addSourceBuffer failed, falling back:', err);
+            captureVoiceException(err, {
+              tags: { voice_stage: 'tts', voice_code: 'MSE_SOURCEBUFFER_FAIL' },
+            });
             reject(err);
             return;
           }
@@ -354,6 +361,9 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to start voice session';
+      captureVoiceException(err, {
+        tags: { voice_stage: 'session', voice_code: 'SESSION_START_FAIL' },
+      });
       setError(msg);
       setOrbState('error');
       setIsSessionActive(false);
@@ -547,6 +557,10 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
         if ((err as Error).name === 'AbortError') return;
 
         const msg = err instanceof Error ? err.message : 'Voice processing failed';
+        captureVoiceException(err, {
+          tags: { voice_stage: 'chat', voice_code: 'VOICE_PROCESSING_FAIL' },
+          extra: { transcript: stt.transcript?.substring(0, 100) },
+        });
         setError(msg);
         setOrbState('error');
 
