@@ -366,6 +366,14 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
   useEffect(() => {
     if (!stt.transcript || !isSessionActive || isProcessingRef.current) return;
 
+    // Quality gate: ignore noise artifacts (too short or no real words)
+    const trimmed = stt.transcript.trim();
+    if (trimmed.length < 3 || trimmed.split(/\s+/).length < 2) {
+      devWarn('[AdminVoice] Ignoring noise transcript:', trimmed);
+      sttRef.current.clearTranscript();
+      return;
+    }
+
     const processTranscript = async () => {
       isProcessingRef.current = true;
       setOrbState('thinking');

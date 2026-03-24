@@ -22,9 +22,11 @@ import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 import { devLog } from '@/lib/devLog';
 
 /** Silence threshold in seconds before auto-submitting speech */
-const SILENCE_THRESHOLD_S = 1.8;
-/** Minimum audio level (0-1) to consider as speech — tuned for typical mics */
-const SPEECH_LEVEL_THRESHOLD = 0.015;
+const SILENCE_THRESHOLD_S = 2.0;
+/** Minimum audio level (0-1) to consider as speech — raised to filter background noise */
+const SPEECH_LEVEL_THRESHOLD = 0.035;
+/** Consecutive frames above threshold required to confirm speech (~200ms at 50ms intervals) */
+const MIN_SPEECH_FRAMES = 4;
 /** Minimum recording duration in ms before auto-submit is allowed */
 const MIN_RECORDING_MS = 500;
 /** Maximum recording duration in ms (safety cap) */
@@ -65,6 +67,7 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
   const silenceStartRef = useRef<number>(0);
   const recordingStartRef = useRef<number>(0);
   const hasSpeechRef = useRef(false);
+  const speechFrameCountRef = useRef(0);
   const sessionSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSubmittingRef = useRef(false);
   const continuousModeRef = useRef(true);
@@ -147,6 +150,7 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
     mediaRecorderRef.current = recorder;
     chunksRef.current = [];
     hasSpeechRef.current = false;
+    speechFrameCountRef.current = 0;
     recordingStartRef.current = Date.now();
     silenceStartRef.current = 0;
 
@@ -189,7 +193,17 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
       const rms = Math.sqrt(sum / dataArray.length);
       setAudioLevel(rms);
 
-      const isSpeaking = rms > SPEECH_LEVEL_THRESHOLD;
+      const isFrameAboveThreshold = rms > SPEECH_LEVEL_THRESHOLD;
+
+      if (isFrameAboveThreshold) {
+        speechFrameCountRef.current += 1;
+      } else {
+        speechFrameCountRef.current = 0;
+      }
+
+      // Require MIN_SPEECH_FRAMES consecutive frames above threshold
+      // to confirm real speech (filters transient noise bursts)
+      const isSpeaking = speechFrameCountRef.current >= MIN_SPEECH_FRAMES;
       setIsSpeechDetected(isSpeaking);
 
       if (isSpeaking) {
@@ -201,8 +215,8 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
           clearTimeout(sessionSilenceTimerRef.current);
           sessionSilenceTimerRef.current = null;
         }
-      } else if (hasSpeechRef.current && silenceStartRef.current === 0) {
-        // Speech just ended — start silence timer
+      } else if (hasSpeechRef.current && !isFrameAboveThreshold && silenceStartRef.current === 0) {
+        // Speech ended (dropped below threshold) — start silence timer
         silenceStartRef.current = Date.now();
       }
 
@@ -260,7 +274,7 @@ export function useElevenLabsSTT(): UseElevenLabsSTTResult {
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.8;
+      analyser.smoothingTimeConstant = 0.85;
       source.connect(analyser);
       analyserRef.current = analyser;
 
