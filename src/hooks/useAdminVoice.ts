@@ -67,6 +67,8 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
 
   // Bug 6E: Track voice conversation history for multi-turn context
   const voiceHistoryRef = useRef<{role: string; content: string}[]>([]);
+  // Track last spoken text for ElevenLabs previous_text prosody continuity
+  const previousTtsTextRef = useRef<string>('');
 
   const stt = useElevenLabsSTT();
   const sttRef = useRef(stt);
@@ -121,7 +123,11 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
         headers: {
           ...buildOpsHeaders({ includeJson: true, includeAdminToken: true, includeSuiteId: false }),
         },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({
+          text,
+          // Multi-turn prosody continuity: helps ElevenLabs maintain voice tone across sentences
+          ...(previousTtsTextRef.current ? { previous_text: previousTtsTextRef.current } : {}),
+        }),
         signal: controller.signal,
       });
 
@@ -135,6 +141,9 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
         devWarn('[AdminVoice] TTS response has no body stream');
         return;
       }
+
+      // Track for next call's previous_text (prosody continuity)
+      previousTtsTextRef.current = text;
 
       // Try MediaSource Extensions for true progressive playback
       const canUseMSE =
@@ -355,6 +364,7 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
     abortControllerRef.current = null;
     isProcessingRef.current = false;
     voiceHistoryRef.current = [];
+    previousTtsTextRef.current = '';
 
     setIsSessionActive(false);
     setOrbState('idle');
