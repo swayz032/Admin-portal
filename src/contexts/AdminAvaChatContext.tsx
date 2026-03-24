@@ -162,6 +162,7 @@ export function AdminAvaChatProvider({ children }: { children: ReactNode }) {
               content: m.content,
             })),
           context: {
+            channel: 'chat',
             attachments: opsDesk.attachments.map(a => ({
               type: a.type,
               id: a.entityId,
