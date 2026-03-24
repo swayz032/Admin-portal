@@ -22,6 +22,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 import { useElevenLabsSTT } from './useElevenLabsSTT';
+import { useAuth } from '@/contexts/AuthContext';
 import { devWarn } from '@/lib/devLog';
 
 export type VoiceOrbState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
@@ -50,6 +51,7 @@ export interface UseAdminVoiceResult {
 
 export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResult {
   const emitReceipt = options?.onReceipt;
+  const { user } = useAuth();
   const [orbState, setOrbState] = useState<VoiceOrbState>('idle');
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [lastAvaResponse, setLastAvaResponse] = useState('');
@@ -383,6 +385,9 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
             message: stt.transcript,
             history: voiceHistoryRef.current.slice(-20),
             context: { channel: 'admin_voice' },
+            user_profile: user?.displayName
+              ? { owner_name: user.displayName }
+              : undefined,
           }),
           signal: controller.signal,
         });

@@ -9,6 +9,7 @@
 import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react';
 import { buildOpsFacadeUrl, buildOpsHeaders } from '@/services/opsFacadeClient';
 import { useOpsDesk, type OpsDeskReceipt, type TranscriptEntry, type PatchJob } from '@/contexts/OpsDeskContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 // ── Message Types ──────────────────────────────────────────────────
 export type ChatMessageRole = 'user' | 'ava' | 'system';
@@ -81,6 +82,7 @@ function now(): string {
 
 // ── Provider ───────────────────────────────────────────────────────
 export function AdminAvaChatProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -165,6 +167,9 @@ export function AdminAvaChatProvider({ children }: { children: ReactNode }) {
               id: a.entityId,
             })),
           },
+          user_profile: user?.displayName
+            ? { owner_name: user.displayName }
+            : undefined,
         }),
         signal: controller.signal,
       });
