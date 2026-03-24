@@ -452,7 +452,9 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
 
               try {
                 const event = JSON.parse(raw) as { type?: string; content?: string };
-                if ((event.type === 'response' || event.type === 'delta') && event.content) {
+
+                if (event.type === 'delta' && event.content) {
+                  // Progressive streaming: accumulate deltas for TTS
                   responseContent += event.content;
                   sentenceBuffer += event.content;
 
@@ -462,6 +464,14 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
                     sentenceBuffer = '';
                     // Fire TTS without awaiting — plays in background
                     playNextInQueue();
+                  }
+                } else if (event.type === 'response' && event.content) {
+                  // Final response event: only use if no deltas arrived
+                  // (fallback non-streaming path). If deltas already built
+                  // responseContent, skip to avoid double content.
+                  if (!responseContent) {
+                    responseContent = event.content;
+                    sentenceBuffer = event.content;
                   }
                 }
               } catch {

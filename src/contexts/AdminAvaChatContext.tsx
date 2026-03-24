@@ -240,10 +240,12 @@ export function AdminAvaChatProvider({ children }: { children: ReactNode }) {
               );
             }
 
-            if (event.type === 'response' || event.type === 'delta') {
+            if (event.type === 'delta' || (event.type === 'response' && !responseContent)) {
+              // 'delta' = progressive streaming tokens; 'response' = final full text.
+              // Only use 'response' if no deltas arrived (non-streaming fallback).
               const newContent = event.content || '';
               if (newContent) {
-                responseContent += newContent;
+                responseContent = event.type === 'response' ? newContent : responseContent + newContent;
 
                 // Transition from thinking → streaming on first content token
                 if (!hasStartedContent) {
