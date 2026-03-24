@@ -81,7 +81,19 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
   }, [isSessionActive]);
 
   // ── Stop any playing audio (for barge-in or session end) ───────────
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
+
   const stopPlayback = useCallback(() => {
+    // Stop MediaSource-based playback
+    if (audioElementRef.current) {
+      try {
+        audioElementRef.current.pause();
+        audioElementRef.current.removeAttribute('src');
+        audioElementRef.current.load();
+      } catch { /* already cleaned up */ }
+      audioElementRef.current = null;
+    }
+    // Stop AudioContext-based playback (fallback path)
     if (currentAudioSourceRef.current) {
       try { currentAudioSourceRef.current.stop(); } catch { /* already stopped */ }
       currentAudioSourceRef.current = null;
@@ -89,6 +101,8 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
   }, []);
 
   // ── Play TTS audio from HTTP streaming endpoint ────────────────────
+  // Uses MediaSource Extensions for progressive playback (sub-200ms first audio)
+  // with AudioContext fallback for browsers that don't support MSE with audio/mpeg.
   const playTtsAudio = useCallback(async (text: string): Promise<void> => {
     try {
       setOrbState('speaking');
@@ -110,25 +124,165 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
         return;
       }
 
-      const audioBytes = await response.arrayBuffer();
-
-      // Validate we got actual audio data
-      if (audioBytes.byteLength < 100) {
-        devWarn('[AdminVoice] TTS returned empty/tiny audio');
+      if (!response.body) {
+        devWarn('[AdminVoice] TTS response has no body stream');
         return;
       }
 
+      // Try MediaSource Extensions for true progressive playback
+      const canUseMSE =
+        typeof MediaSource !== 'undefined' &&
+        MediaSource.isTypeSupported('audio/mpeg');
+
+      if (canUseMSE) {
+        return await playWithMediaSource(response.body, controller.signal);
+      }
+
+      // Fallback: accumulate chunks then decode via AudioContext
+      return await playWithAudioContext(response.body);
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
+      devWarn('[AdminVoice] TTS playback failed:', err);
+    }
+  }, []);
+
+  // ── MediaSource Extensions path — progressive audio ─────────────────
+  const playWithMediaSource = useCallback(
+    (body: ReadableStream<Uint8Array>, signal: AbortSignal): Promise<void> => {
+      return new Promise<void>((resolve, reject) => {
+        const mediaSource = new MediaSource();
+        const audio = new Audio();
+        audio.src = URL.createObjectURL(mediaSource);
+        audioElementRef.current = audio;
+
+        // Queue for chunks arriving before SourceBuffer is ready
+        const pendingChunks: Uint8Array[] = [];
+        let sourceBuffer: SourceBuffer | null = null;
+        let streamDone = false;
+        let totalBytes = 0;
+
+        const flushPending = () => {
+          if (!sourceBuffer || sourceBuffer.updating) return;
+          if (pendingChunks.length > 0) {
+            const chunk = pendingChunks.shift()!;
+            sourceBuffer.appendBuffer(chunk);
+          } else if (streamDone && mediaSource.readyState === 'open') {
+            try { mediaSource.endOfStream(); } catch { /* already ended */ }
+          }
+        };
+
+        mediaSource.addEventListener('sourceopen', () => {
+          try {
+            sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg');
+          } catch (err) {
+            devWarn('[AdminVoice] MSE addSourceBuffer failed, falling back:', err);
+            reject(err);
+            return;
+          }
+
+          sourceBuffer.addEventListener('updateend', flushPending);
+
+          // Start reading the stream
+          const reader = body.getReader();
+          const pump = async () => {
+            try {
+              while (true) {
+                if (signal.aborted) {
+                  reader.cancel();
+                  return;
+                }
+                const { done, value } = await reader.read();
+                if (done) {
+                  streamDone = true;
+                  flushPending();
+                  return;
+                }
+                if (value && value.length > 0) {
+                  totalBytes += value.length;
+                  pendingChunks.push(value);
+                  flushPending();
+
+                  // Start playback as soon as we have enough data (~8KB)
+                  if (totalBytes > 8192 && audio.paused) {
+                    audio.play().catch(() => {
+                      devWarn('[AdminVoice] MSE autoplay blocked, will retry on next chunk');
+                    });
+                  }
+                }
+              }
+            } catch (err) {
+              if ((err as Error).name !== 'AbortError') {
+                devWarn('[AdminVoice] MSE stream read error:', err);
+              }
+              streamDone = true;
+              flushPending();
+            }
+          };
+          pump();
+        });
+
+        audio.addEventListener('ended', () => {
+          audioElementRef.current = null;
+          URL.revokeObjectURL(audio.src);
+          resolve();
+        });
+
+        audio.addEventListener('error', () => {
+          audioElementRef.current = null;
+          URL.revokeObjectURL(audio.src);
+          devWarn('[AdminVoice] MSE audio element error:', audio.error?.message);
+          resolve(); // Don't reject — let the loop continue
+        });
+
+        // Safety: if aborted externally (barge-in), clean up
+        signal.addEventListener('abort', () => {
+          audio.pause();
+          audioElementRef.current = null;
+          URL.revokeObjectURL(audio.src);
+          resolve();
+        });
+      });
+    },
+    [],
+  );
+
+  // ── AudioContext fallback — accumulate then decode ───────────────────
+  const playWithAudioContext = useCallback(
+    async (body: ReadableStream<Uint8Array>): Promise<void> => {
       if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
         audioContextRef.current = new AudioContext();
       }
       const ctx = audioContextRef.current;
-
-      // Resume if suspended (browser autoplay policy)
       if (ctx.state === 'suspended') {
         await ctx.resume();
       }
 
-      const audioBuffer = await ctx.decodeAudioData(audioBytes);
+      const reader = body.getReader();
+      const chunks: Uint8Array[] = [];
+      let totalLength = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          totalLength += value.length;
+        }
+      }
+
+      if (totalLength < 100) {
+        devWarn('[AdminVoice] TTS returned empty/tiny audio');
+        return;
+      }
+
+      const combined = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const chunk of chunks) {
+        combined.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      const audioBuffer = await ctx.decodeAudioData(combined.buffer);
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(ctx.destination);
@@ -141,12 +295,15 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
         };
         source.start();
       });
-    } catch (err) {
-      if ((err as Error).name === 'AbortError') return;
-      devWarn('[AdminVoice] TTS playback failed:', err);
-    } finally {
-      currentAudioSourceRef.current = null;
-    }
+    },
+    [],
+  );
+
+  // ── Pre-warm backend connections (eliminates 80-200ms cold TCP/TLS) ─
+  const prewarmConnections = useCallback(() => {
+    // Fire-and-forget: hit the health endpoint to establish the TCP+TLS
+    // connection pool. Subsequent TTS/chat fetches reuse the warm connection.
+    fetch(buildOpsFacadeUrl('/admin/ops/health'), { method: 'GET' }).catch(() => {});
   }, []);
 
   // ── Session management ─────────────────────────────────────────────
@@ -156,6 +313,8 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
       setOrbState('listening');
       setIsSessionActive(true);
 
+      // Pre-warm backend connection in parallel with mic setup
+      prewarmConnections();
       await sttRef.current.startListening();
 
       emitReceipt?.({
@@ -176,7 +335,7 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
         summary: msg,
       });
     }
-  }, [emitReceipt]);
+  }, [emitReceipt, prewarmConnections]);
 
   const endSession = useCallback(() => {
     sttRef.current.stopListening();
@@ -353,6 +512,7 @@ export function useAdminVoice(options?: UseAdminVoiceOptions): UseAdminVoiceResu
       if (audioContextRef.current?.state !== 'closed') {
         audioContextRef.current?.close().catch(() => {});
       }
+      audioElementRef.current = null;
     };
   }, [stopPlayback]);
 
