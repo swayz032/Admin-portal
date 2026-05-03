@@ -34,7 +34,7 @@ function mapCustomerRow(row: Record<string, unknown>): Customer {
 
   return {
     id: (row.suite_id as string) ?? (row.id as string),
-    name: (row.business_name as string) ?? (row.name as string) ?? 'Unknown',
+    name: (row.business_name as string) ?? (row.name as string) ?? 'Unnamed suite',
     status: derivedStatus as Customer['status'],
     plan: 'Aspire Suite',
     mrr: 0,

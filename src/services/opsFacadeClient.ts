@@ -17,6 +17,13 @@ const OPS_BASE_URL = (
   'http://localhost:8000'
 ).replace(/\/+$/, '');
 
+const OPS_FACADE_ENABLED = (() => {
+  const explicit = import.meta.env.VITE_OPS_FACADE_ENABLED;
+  if (explicit === 'true') return true;
+  if (explicit === 'false') return false;
+  return !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(OPS_BASE_URL);
+})();
+
 const OPS_PUBLIC_PATHS = new Set([
   '/admin/auth/exchange',
   '/admin/ops/health',
@@ -298,6 +305,10 @@ export function getOpsFacadeBaseUrl(): string {
   return OPS_BASE_URL;
 }
 
+export function isOpsFacadeEnabled(): boolean {
+  return OPS_FACADE_ENABLED;
+}
+
 export function buildOpsFacadeUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${OPS_BASE_URL}${normalizedPath}`;
@@ -401,6 +412,10 @@ async function parseOpsErrorResponse(response: Response): Promise<OpsError> {
 }
 
 async function opsFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  if (!OPS_FACADE_ENABLED) {
+    throw new OpsFacadeError('Ops facade disabled for this environment', 'DISABLED', 503);
+  }
+
   const shouldAttachAdminToken = !OPS_PUBLIC_PATHS.has(path);
 
   if (shouldAttachAdminToken && !getAdminToken()) {
@@ -465,6 +480,10 @@ export async function fetchOpsHealth(): Promise<OpsHealthResponse> {
 
 /** POST /admin/auth/exchange — convert Supabase access token into admin JWT */
 export async function exchangeAdminToken(accessToken: string): Promise<AdminTokenExchangeResponse> {
+  if (!OPS_FACADE_ENABLED) {
+    throw new OpsFacadeError('Ops facade disabled for this environment', 'DISABLED', 503);
+  }
+
   if (!accessToken) {
     throw new OpsFacadeError('Missing access token for admin exchange', 'AUTH_REQUIRED', 401);
   }

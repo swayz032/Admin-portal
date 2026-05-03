@@ -17,14 +17,14 @@ interface PageHeroProps {
 export function PageHero({ title, subtitle, status, icon, action, className }: PageHeroProps) {
   return (
     <div className={cn(
-      'relative p-6 rounded-xl border border-border/50 bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-sm',
-      'before:absolute before:inset-0 before:rounded-xl before:bg-gradient-to-r before:from-primary/5 before:to-transparent before:pointer-events-none',
+      'canvas-card relative p-6',
+      'before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:rounded-l-lg before:bg-primary before:pointer-events-none',
       className
     )}>
       <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-start gap-4">
           {icon && (
-            <div className="hidden sm:flex w-14 h-14 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 items-center justify-center ring-1 ring-primary/20 flex-shrink-0">
+            <div className="canvas-tile hidden h-14 w-14 items-center justify-center text-primary sm:flex">
               <div className="text-primary">{icon}</div>
             </div>
           )}

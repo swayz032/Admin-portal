@@ -40,10 +40,10 @@ export default function Approvals() {
 
   // Sync hook data into local state when it arrives
   useEffect(() => {
-    if (initialApprovals.length > 0) setApprovalsData(initialApprovals);
+    setApprovalsData(initialApprovals);
   }, [initialApprovals]);
   useEffect(() => {
-    if (fetchedReceipts.length > 0) setLocalReceipts(fetchedReceipts);
+    setLocalReceipts(fetchedReceipts);
   }, [fetchedReceipts]);
   const [approvalDialog, setApprovalDialog] = useState<{ approval: Approval; action: 'approve' | 'deny' } | null>(null);
   const [decisionReason, setDecisionReason] = useState('');

@@ -38,7 +38,7 @@ import {
   type AudienceInsights,
   fetchAudienceInsights,
 } from '@/services/apiClient';
-import { fetchOpsProviderRotationSummary, fetchOpsProviders, type OpsProviderRotationSummary } from '@/services/opsFacadeClient';
+import { fetchOpsProviderRotationSummary, fetchOpsProviders, isOpsFacadeEnabled, type OpsProviderRotationSummary } from '@/services/opsFacadeClient';
 import { devWarn } from '@/lib/devLog';
 
 import type { Approval, Incident, Receipt, Customer, Subscription, Provider } from '@/data/seed';
@@ -206,13 +206,13 @@ function formatProviderLane(lane: string): string {
 }
 
 function formatRotationMode(mode?: string): string {
-  if (!mode) return 'Unknown rotation';
+  if (!mode) return 'Rotation policy not configured';
   if (mode === 'manual_alerted') return 'Manual alert rotation';
   return mode.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
 }
 
 function formatAutomationStatus(status?: string): string {
-  if (!status) return 'Unknown automation state';
+  if (!status) return 'Automation state not configured';
   return status.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
 }
 
@@ -269,7 +269,7 @@ export function useProviders() {
         const mapped: Provider[] = (facade.items ?? []).map((p) => ({
           id: p.provider,
           name: formatProviderName(p.provider),
-          type: p.lane ? formatProviderLane(p.lane) : 'Unknown',
+          type: p.lane ? formatProviderLane(p.lane) : 'Source lane not configured',
           status: p.status === 'connected' ? 'Healthy' : p.status === 'degraded' ? 'At Risk' : 'Read-only Allowed',
           lastChecked: p.last_checked ?? '',
           latency: p.latency_ms ?? 0,
@@ -299,7 +299,7 @@ export function useProviders() {
           pageSize: Math.max(mapped.length, 1),
         };
       } catch (error) {
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && isOpsFacadeEnabled()) {
           devWarn('Ops facade providers unavailable, falling back to Supabase provider query:', error);
         }
         try {
@@ -308,8 +308,8 @@ export function useProviders() {
           if (import.meta.env.DEV) {
             devWarn('Supabase provider fallback failed:', fallbackError);
           }
-          const primaryMessage = error instanceof Error ? error.message : 'unknown facade error';
-          const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : 'unknown supabase error';
+          const primaryMessage = error instanceof Error ? error.message : 'facade error unavailable';
+          const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : 'supabase error unavailable';
           throw new Error(
             `Provider health unavailable: ops facade failed (${primaryMessage}); supabase fallback failed (${fallbackMessage})`,
           );

@@ -47,25 +47,33 @@ export function useRealtimeIncidents(filters?: IncidentFilters) {
   // Initial load
   useEffect(() => { load(); }, [load]);
 
-  // Realtime: refetch on new pipeline failures (debounced)
+  // Realtime: refetch on receipt/incident inserts and updates (debounced).
   useEffect(() => {
     let debounceTimer: ReturnType<typeof setTimeout>;
+    const scheduleLoad = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => load(), 1000);
+    };
 
     const channel = supabase
       .channel('pipeline-incidents-refresh')
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'receipts',
-          filter: 'status=in.(FAILED,DENIED)',
         },
-        (_payload) => {
-          // Debounce: batch rapid inserts into 1 refetch
-          clearTimeout(debounceTimer);
-          debounceTimer = setTimeout(() => load(), 2000);
+        scheduleLoad,
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'incidents',
         },
+        scheduleLoad,
       )
       .subscribe();
 

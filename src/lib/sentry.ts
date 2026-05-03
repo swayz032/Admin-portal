@@ -122,6 +122,34 @@ export function addVoiceBreadcrumb(
     .catch(() => { /* @sentry/react not installed */ });
 }
 
+export function setSentryAdminContext(context: {
+  route?: string;
+  suiteId?: string;
+  suiteDisplayId?: string;
+  officeId?: string;
+  officeDisplayId?: string;
+  surface?: string;
+}): void {
+  import('@sentry/react')
+    .then((Sentry) => {
+      if (context.route) Sentry.setTag('route', context.route);
+      if (context.surface) Sentry.setTag('surface', context.surface);
+      if (context.suiteId) Sentry.setTag('suite_id', context.suiteId);
+      if (context.suiteDisplayId) Sentry.setTag('suite_display_id', context.suiteDisplayId);
+      if (context.officeId) Sentry.setTag('office_id', context.officeId);
+      if (context.officeDisplayId) Sentry.setTag('office_display_id', context.officeDisplayId);
+      Sentry.setContext('admin_scope', scrubDict({
+        route: context.route,
+        surface: context.surface,
+        suite_id: context.suiteId,
+        suite_display_id: context.suiteDisplayId,
+        office_id: context.officeId,
+        office_display_id: context.officeDisplayId,
+      }));
+    })
+    .catch(() => { /* @sentry/react not installed */ });
+}
+
 export function initSentry(): void {
   const dsn = import.meta.env.VITE_SENTRY_DSN;
   if (!dsn) {

@@ -20,11 +20,16 @@ import Auth from "./pages/Auth";
 
 // Lazy loaded (code-split per route)
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const AdminHealth = lazy(() => import("./pages/AdminHealth"));
+const AspireHealth = lazy(() => import("./pages/AspireHealth"));
+const AdminLogs = lazy(() => import("./pages/AdminLogs"));
 const Approvals = lazy(() => import("./pages/Approvals"));
 const Activity = lazy(() => import("./pages/Activity"));
 const Safety = lazy(() => import("./pages/Safety"));
 const Incidents = lazy(() => import("./pages/Incidents"));
 const Customers = lazy(() => import("./pages/Customers"));
+const Users = lazy(() => import("./pages/Users"));
+const UserDetail = lazy(() => import("./pages/UserDetail"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions"));
 const ConnectedApps = lazy(() => import("./pages/ConnectedApps"));
 const Advanced = lazy(() => import("./pages/Advanced"));
@@ -115,7 +120,7 @@ const App = () => (
     ) : (
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <BrowserRouter>
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <AuthProvider>
               <SystemProvider>
                 <ScopeProvider>
@@ -143,6 +148,36 @@ const App = () => (
                   <ProtectedRoute>
                     <AppLayout>
                       <Dashboard />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin-health"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <AdminHealth />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/aspire-health"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <AspireHealth />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin-logs"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <AdminLogs />
                     </AppLayout>
                   </ProtectedRoute>
                 }
@@ -203,6 +238,26 @@ const App = () => (
                   <ProtectedRoute>
                     <AppLayout>
                       <Customers />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/users"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <Users />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/users/:id"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <UserDetail />
                     </AppLayout>
                   </ProtectedRoute>
                 }

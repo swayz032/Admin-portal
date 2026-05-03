@@ -1,7 +1,9 @@
 import { useState, useEffect, ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { useSystem } from '@/contexts/SystemContext';
+import { useScope } from '@/contexts/ScopeContext';
 import { AlertTriangle } from 'lucide-react';
 import { AvaFloatingButton } from '@/components/ava/AvaFloatingButton';
 import { ProviderAlertBanner } from '@/components/admin-ava/ProviderAlertBanner';
@@ -9,6 +11,7 @@ import { SystemStatusBanner } from '@/components/shared/SystemStatusBanner';
 import { useRealtimeApprovals } from '@/hooks/useRealtimeApprovals';
 import { useRealtimeIncidents } from '@/hooks/useRealtimeIncidents';
 import { useRedAlertBroadcast } from '@/hooks/useRedAlertBroadcast';
+import { setSentryAdminContext } from '@/lib/sentry';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -17,6 +20,7 @@ interface AppLayoutProps {
 const SIDEBAR_COLLAPSED_KEY = 'aspire_sidebar_collapsed';
 
 export function AppLayout({ children }: AppLayoutProps) {
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
@@ -27,11 +31,23 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
   });
   const { systemState } = useSystem();
+  const { selectedSuite, selectedOffice } = useScope();
 
   // Sync collapse state with localStorage
   useEffect(() => {
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, JSON.stringify(sidebarCollapsed));
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    setSentryAdminContext({
+      route: location.pathname,
+      suiteId: selectedSuite?.id ?? 'all_suites',
+      suiteDisplayId: selectedSuite?.displayId ?? 'all',
+      officeId: selectedOffice?.id ?? 'all_offices',
+      officeDisplayId: selectedOffice?.displayId ?? 'all',
+      surface: 'admin_portal',
+    });
+  }, [location.pathname, selectedOffice?.displayId, selectedOffice?.id, selectedSuite?.displayId, selectedSuite?.id]);
 
   // Real Supabase data for Ava notification counts
   const { data: allApprovals } = useRealtimeApprovals({ status: 'Pending' });

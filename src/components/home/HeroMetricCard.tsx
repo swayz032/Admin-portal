@@ -29,11 +29,11 @@ export function HeroMetricCard({
   linkTo,
   linkLabel = 'View details',
 }: HeroMetricCardProps) {
-  const statusColors = {
-    success: 'from-success/20 to-success/5',
-    warning: 'from-warning/20 to-warning/5',
-    critical: 'from-destructive/20 to-destructive/5',
-    neutral: 'from-primary/10 to-primary/5',
+  const statusBorders = {
+    success: 'border-success/30',
+    warning: 'border-warning/35',
+    critical: 'border-destructive/35',
+    neutral: 'border-primary/30',
   };
 
   const trendColors = {
@@ -56,22 +56,18 @@ export function HeroMetricCard({
   const content = (
     <div
       className={cn(
-        'relative rounded-2xl p-6 transition-all duration-300 group cursor-pointer',
-        'bg-gradient-to-br',
-        statusColors[status],
-        'border border-white/[0.06]',
-        'hover:translate-y-[-4px] hover:shadow-xl hover:shadow-black/30',
-        'hover:border-white/[0.1]'
+        'canvas-card group relative cursor-pointer p-6 transition-all duration-300',
+        statusBorders[status],
+        'hover:border-primary/50'
       )}
     >
-      {/* Background glow effect */}
       <div 
         className={cn(
-          'absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500',
-          status === 'success' && 'bg-success/5',
-          status === 'warning' && 'bg-warning/5',
-          status === 'critical' && 'bg-destructive/5',
-          status === 'neutral' && 'bg-primary/5'
+          'absolute left-0 top-0 h-full w-1 rounded-l-lg',
+          status === 'success' && 'bg-success',
+          status === 'warning' && 'bg-warning',
+          status === 'critical' && 'bg-destructive',
+          status === 'neutral' && 'bg-primary'
         )}
       />
 

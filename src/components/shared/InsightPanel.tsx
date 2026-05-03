@@ -49,13 +49,9 @@ export function InsightPanel({
 
   return (
     <div className={cn(
-      'p-5 rounded-xl border border-border/50 bg-gradient-to-br from-card/80 to-card/40',
-      'backdrop-blur-sm relative overflow-hidden group',
+      'canvas-card group relative overflow-hidden p-5',
       className
     )}>
-      {/* Subtle gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none" />
-      
       <div className="relative space-y-3">
         {/* Header with icon */}
         <div className="flex items-start justify-between gap-3">
@@ -70,7 +66,7 @@ export function InsightPanel({
             )}
           </div>
           {icon && (
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 text-primary">
+            <div className="canvas-tile flex h-10 w-10 flex-shrink-0 items-center justify-center text-primary">
               {icon}
             </div>
           )}

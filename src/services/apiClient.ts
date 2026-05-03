@@ -87,7 +87,7 @@ export async function fetchApprovals(filters?: {
     query = query.eq('status', filters.status.toLowerCase());
   }
   if (filters?.risk) {
-    query = query.eq('risk_level', filters.risk.toLowerCase());
+    query = query.eq('risk_tier', approvalRiskToDbTier(filters.risk));
   }
 
   const { data, error, count } = await query;
@@ -101,21 +101,135 @@ export async function fetchApprovals(filters?: {
   };
 }
 
-function mapApprovalRow(row: Record<string, unknown>): Approval {
-  const riskLevel = (row.risk_level as string) ?? 'none';
+function isPlaceholderData(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return (
+    !normalized ||
+    normalized === 'unknown' ||
+    normalized === 'unknown action' ||
+    normalized === 'unlabeled' ||
+    normalized === 'unlabeled action' ||
+    normalized === 'no requester linked' ||
+    normalized === 'no user linked' ||
+    normalized === 'no company linked' ||
+    normalized === 'n/a' ||
+    normalized === 'null' ||
+    normalized === 'undefined'
+  );
+}
+
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === 'string' && !isPlaceholderData(value)) return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  }
+  return '';
+}
+
+function readString(row: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = row[key];
+    const parsed = firstString(value);
+    if (parsed) return parsed;
+  }
+  return '';
+}
+
+function readRecordString(row: Record<string, unknown>, keys: string[]): string {
+  return readString(row, keys);
+}
+
+export function deriveReceiptActionType(row: Record<string, unknown>): string {
+  const action = ((row.action as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+  const payload = ((row.payload as Record<string, unknown>) ?? action) as Record<string, unknown>;
+  const result = ((row.result as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+  const receiptType = readString(row, ['receipt_type', 'domain']);
+  const toolUsed = readRecordString(action, ['tool_used', 'tool', 'provider_tool', 'service']);
+
+  const explicit = firstString(
+    row.action_type,
+    action.action_type,
+    action.operation,
+    action.operation_name,
+    action.type,
+    payload.action_type,
+    payload.operation,
+    payload.event_type,
+    result.action_type,
+    result.operation,
+    toolUsed,
+  );
+  if (explicit) return explicit;
+
+  const errorCode = firstString(
+    result.error_code,
+    result.reason_code,
+    result.code,
+    payload.error_code,
+    payload.reason_code,
+  );
+  if (errorCode) return `${receiptType || 'operation'}.${errorCode}`;
+
+  const resource = firstString(
+    action.resource,
+    action.resource_type,
+    action.table,
+    payload.resource,
+    payload.resource_type,
+    payload.table,
+    result.resource,
+    result.table,
+    row.resource_type,
+  );
+  if (resource) return `${receiptType || 'resource'}.${resource}`;
+
+  return receiptType || 'receipt.failure';
+}
+
+function approvalRiskToDbTier(risk: string): string {
+  switch (risk.toLowerCase()) {
+    case 'high':
+      return 'red';
+    case 'medium':
+      return 'yellow';
+    case 'low':
+      return 'green';
+    default:
+      return risk.toLowerCase();
+  }
+}
+
+export function mapApprovalRow(row: Record<string, unknown>): Approval {
+  const riskLevel = readString(row, ['risk_level', 'risk_tier']) || 'none';
   const status = (row.status as string) ?? 'pending';
+  const operation = readString(row, ['operation', 'action_type', 'tool', 'type', 'resource_type']);
+  const type = operation ? derivePremiumActionLabel(operation, 'engineer') : 'Approval decision';
+  const resourceType = readString(row, ['resource_type']);
+  const resourceId = readString(row, ['resource_id']);
+  const tenantId = readString(row, ['tenant_id']);
+  const customer = readString(row, ['customer', 'requester_name', 'suite_name', 'company_name'])
+    || (resourceId ? `${humanizeSourceName(resourceType, 'Resource')} ${resourceId}` : '')
+    || (tenantId ? `Tenant ${tenantId}` : 'No company linked yet');
+  const requestedBy = readString(row, ['requested_by', 'actor', 'assigned_agent', 'orchestrator', 'created_by_user_id'])
+    || 'Authority policy';
+  const summary = readString(row, ['draft_summary', 'summary', 'description', 'reason'])
+    || `${type} is waiting for approval for ${customer}`;
+  const approvalId = readString(row, ['id', 'approval_id', 'approval_hash', 'trace_id'])
+    || ['approval', operation || 'decision', tenantId || 'tenant', readString(row, ['created_at', 'expires_at', 'run_id']) || 'pending']
+      .join('-')
+      .replace(/\s+/g, '-');
 
   return {
-    id: row.id as string,
-    type: (row.action_type as string) ?? (row.type as string) ?? 'Unknown',
+    id: approvalId,
+    type,
     risk: mapRiskLabel(riskLevel),
-    customer: (row.customer as string) ?? (row.requester_name as string) ?? '',
-    summary: (row.summary as string) ?? (row.description as string) ?? '',
-    requestedBy: (row.requested_by as string) ?? (row.actor as string) ?? '',
+    customer,
+    summary,
+    requestedBy,
     requestedAt: (row.created_at as string) ?? (row.requested_at as string) ?? '',
     status: mapApprovalStatus(status),
     decisionReason: (row.decision_reason as string) ?? undefined,
-    evidenceReceiptIds: (row.linked_receipt_ids as string[]) ?? [],
+    evidenceReceiptIds: ((row.linked_receipt_ids as string[]) ?? (row.evidence_receipt_ids as string[]) ?? []),
     linkedIncidentId: (row.linked_incident_id as string) ?? undefined,
   };
 }
@@ -154,7 +268,6 @@ export async function fetchIncidents(filters?: {
     .from('receipts')
     .select('receipt_id, receipt_type, status, action, result, correlation_id, suite_id, tenant_id, actor_id, created_at')
     .in('status', ['FAILED', 'DENIED'])
-    .not('receipt_type', 'like', 'n8n_%')
     .order('created_at', { ascending: false })
     .limit(5000);
 
@@ -162,9 +275,9 @@ export async function fetchIncidents(filters?: {
     devWarn('[fetchIncidents] Supabase error:', error.message, error.code, error.details);
     throw new ApiError(`Failed to fetch incidents: ${error.message}`, error.code);
   }
-  devWarn(`[fetchIncidents] Raw failure rows: ${data?.length ?? 0}, view: ${filters?.view ?? 'grouped'}`);
 
-  // Aggregate by fingerprint key: receipt_type + action_type + status
+  // Aggregate by owner scope + fingerprint so one company's failure cannot
+  // collapse into another company's incident story.
   const groups = new Map<string, {
     rows: Record<string, unknown>[];
     count: number;
@@ -177,11 +290,11 @@ export async function fetchIncidents(filters?: {
 
   for (const row of data ?? []) {
     const action = (row.action as Record<string, unknown>) ?? {};
-    const actionType = (action.action_type as string) ?? '';
-    const toolUsed = (action.tool_used as string) ?? '';
+    const actionType = deriveReceiptActionType(row as Record<string, unknown>);
+    const toolUsed = readRecordString(action, ['tool_used', 'tool', 'provider_tool']);
     const status = ((row.status as string) ?? '').toLowerCase();
-    // Fingerprint: receipt_type + action_type + tool + status
-    const key = `${row.receipt_type}::${actionType}::${toolUsed}::${status}`;
+    const scopeKey = readString(row as Record<string, unknown>, ['suite_id', 'tenant_id']) || 'platform';
+    const key = `${scopeKey}::${row.receipt_type}::${actionType}::${toolUsed}::${status}`;
     const ts = row.created_at as string;
 
     const existing = groups.get(key);
@@ -211,7 +324,9 @@ export async function fetchIncidents(filters?: {
     if (filters?.severity) {
       allIncidents = allIncidents.filter(i => i.severity === filters.severity);
     }
-    devWarn(`[fetchIncidents] All-events view: ${allIncidents.length} individual incidents`);
+    if (filters?.status) {
+      allIncidents = allIncidents.filter(i => i.status.toLowerCase() === filters.status?.toLowerCase());
+    }
     return { data: allIncidents, count: allIncidents.length, page: 1, pageSize: allIncidents.length };
   }
 
@@ -223,9 +338,12 @@ export async function fetchIncidents(filters?: {
     const incident = mapIncidentRow(row);
     // Enrich with aggregation data
     const isActive = g.latest >= twentyFourHoursAgo;
+    incident.status = isActive ? 'Open' : 'Resolved';
     incident.occurrenceCount = g.count;
     incident.firstSeen = g.earliest;
     incident.lastSeen = g.latest;
+    incident.createdAt = g.earliest;
+    incident.updatedAt = g.latest;
     incident.notes = [
       ...incident.notes,
       {
@@ -251,9 +369,11 @@ export async function fetchIncidents(filters?: {
   if (filters?.severity) {
     incidents = incidents.filter(i => i.severity === filters.severity);
   }
+  if (filters?.status) {
+    incidents = incidents.filter(i => i.status.toLowerCase() === filters.status?.toLowerCase());
+  }
 
-  // Return ALL aggregated groups (typically 20-80 groups from ~2000 raw rows)
-  devWarn(`[fetchIncidents] Grouped view: ${incidents.length} groups from ${data?.length ?? 0} raw rows`);
+  // Return ALL aggregated groups (typically 20-80 groups from high-volume receipt rows)
   return {
     data: incidents,
     count: incidents.length,
@@ -299,8 +419,7 @@ export async function fetchN8nIncidents(): Promise<N8nIncidentGroup[]> {
   }>();
 
   for (const row of data ?? []) {
-    const action = (row.action as Record<string, unknown>) ?? {};
-    const actionType = (action.action_type as string) ?? 'unknown';
+    const actionType = deriveReceiptActionType(row as Record<string, unknown>);
     const existing = groups.get(actionType);
     const ts = row.created_at as string;
 
@@ -482,11 +601,20 @@ function deriveN8nIncidentDetails(actionType: string, count: number): {
 function mapIncidentRow(row: Record<string, unknown>): Incident {
   const action = (row.action as Record<string, unknown>) ?? {};
   const result = (row.result as Record<string, unknown>) ?? {};
+  const payload = ((row.payload as Record<string, unknown>) ?? action) as Record<string, unknown>;
   const status = ((row.status as string) ?? 'failed').toLowerCase();
   const receiptType = (row.receipt_type as string) ?? '';
-  const actionType = (action.action_type as string) ?? '';
-  const toolUsed = (action.tool_used as string) ?? '';
-  const errorMsg = (result.error_message as string) ?? (result.error as string) ?? (result.reason_code as string) ?? '';
+  const actionType = deriveReceiptActionType(row);
+  const toolUsed = readRecordString(action, ['tool_used', 'tool', 'provider_tool']);
+  const errorMsg = firstString(
+    result.error_message,
+    result.error,
+    result.reason,
+    result.reason_code,
+    result.error_code,
+    payload.error_message,
+    payload.error,
+  );
 
   return {
     id: (row.receipt_id as string) ?? `${receiptType}-${row.created_at}`,
@@ -552,6 +680,14 @@ function derivePremiumSummary(
   if (rt === 'onboarding.profile_update')
     return 'Profile Update Failed — Customer onboarding profile changes not saving. Setup flow interrupted.';
 
+  // Alert receipts
+  if (rt.startsWith('alert_') || rt.startsWith('alert.')) {
+    const alertName = humanizeSourceName(rt.replace(/^alert[._]/, ''), 'Platform alert');
+    const operation = derivePremiumActionLabel(actionType || receiptType, 'engineer');
+    if (errorMsg) return `${alertName} Alert - ${errorMsg}`;
+    return `${alertName} Alert - ${operation} failed. Open the linked trace to find the failing table, worker, or heartbeat source.`;
+  }
+
   // Param extraction
   if (rt === 'param_extraction')
     return `Parameter Extraction Failed — Cannot parse ${toolUsed || 'tool'} request. Agent action blocked at planning stage.`;
@@ -600,6 +736,10 @@ function derivePremiumSummary(
     .replace(/[._]/g, ' ')
     .replace(/\b\w/g, c => c.toUpperCase())
     .trim();
+  if (!cleanType) {
+    if (errorMsg) return `Unclassified source - ${errorMsg}`;
+    return `Unclassified source - Operation ${status || 'failed'}. Review receipt details for root cause.`;
+  }
   if (errorMsg) return `${cleanType} — ${errorMsg}`;
   return `${cleanType} — Operation ${status}. Review receipt details for root cause.`;
 }
@@ -609,7 +749,7 @@ function derivePremiumSummary(
  * Used on Receipts and Provider Call Log pages to replace cryptic snake_case values.
  */
 export function derivePremiumActionLabel(actionType: string, viewMode: 'operator' | 'engineer' = 'operator'): string {
-  if (!actionType) return 'Unknown Action';
+  if (!actionType) return viewMode === 'operator' ? 'Action metadata missing' : 'Missing Action Metadata';
   const at = actionType.toLowerCase().trim();
 
   // ─── Knowledge & Search ───
@@ -755,7 +895,16 @@ export function derivePremiumActionLabel(actionType: string, viewMode: 'operator
     .replace(/\s+/g, ' ')
     .trim();
 
-  return viewMode === 'operator' ? cleaned : cleaned;
+  return cleaned || (viewMode === 'operator' ? 'Action metadata missing' : 'Missing Action Metadata');
+}
+
+function humanizeSourceName(value: string | undefined, fallback: string): string {
+  const cleaned = (value ?? '')
+    .replace(/[._-]/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || fallback;
 }
 
 function deriveProvider(
@@ -775,7 +924,9 @@ function deriveProvider(
   if (rt === 'auth_denial') return 'Auth Guard';
   if (rt.startsWith('domain')) return 'Domain Rail';
   if (rt.startsWith('onboarding')) return 'Onboarding';
-  return (action.provider as string) ?? 'Internal';
+  if (action.provider) return humanizeSourceName(action.provider as string, 'Internal platform');
+  if (receiptType) return deriveCategoryFromReceiptType(receiptType).label;
+  return 'Internal platform';
 }
 
 function deriveRecommendedAction(receiptType: string, actionType: string, errorMsg: string): string {
@@ -801,7 +952,7 @@ function deriveSeverity(row: Record<string, unknown>): 'P0' | 'P1' | 'P2' | 'P3'
   const receiptType = ((row.receipt_type as string) ?? '').toLowerCase();
   const status = ((row.status as string) ?? '').toLowerCase();
   const result = (row.result as Record<string, unknown>) ?? {};
-  const errorMsg = ((result.error as string) ?? '').toLowerCase();
+  const errorMsg = ((result.error_message as string) ?? (result.error as string) ?? (result.reason_code as string) ?? '').toLowerCase();
 
   // P0 — Security events, expired credentials with revenue impact
   if (receiptType.startsWith('mail.oauth') || receiptType.includes('security')) return 'P0';
@@ -868,11 +1019,15 @@ export async function fetchReceipts(filters?: {
     .range(from, to);
 
   if (filters?.status) {
-    const mapped = filters.status.toLowerCase() === 'success' ? 'success'
-      : filters.status.toLowerCase() === 'failed' ? 'failed'
-      : filters.status.toLowerCase() === 'blocked' ? 'blocked'
-      : filters.status;
-    query = query.eq('status', mapped);
+    const status = filters.status.toLowerCase();
+    const mapped = status === 'success'
+      ? ['SUCCEEDED', 'success']
+      : status === 'failed'
+        ? ['FAILED', 'failed']
+        : status === 'blocked'
+          ? ['DENIED', 'BLOCKED', 'blocked', 'denied']
+          : [filters.status, filters.status.toUpperCase()];
+    query = query.in('status', mapped);
   }
   if (filters?.provider) query = query.eq('provider', filters.provider);
   if (filters?.correlationId) query = query.eq('correlation_id', filters.correlationId);
@@ -889,24 +1044,34 @@ export async function fetchReceipts(filters?: {
 }
 
 function mapReceiptRow(row: Record<string, unknown>): Receipt {
-  const payload = (row.payload as Record<string, unknown>) ?? {};
-  const status = (row.status as string) ?? 'success';
+  const action = (row.action as Record<string, unknown>) ?? {};
+  const payload = (row.payload as Record<string, unknown>) ?? action;
+  const result = (row.result as Record<string, unknown>) ?? {};
+  const status = ((row.status as string) ?? 'SUCCEEDED').toUpperCase();
+  const receiptType = (row.receipt_type as string) ?? (row.domain as string) ?? '';
+  const toolUsed = (action.tool_used as string) ?? '';
+  const actionType = deriveReceiptActionType(row);
+  const outcome: Receipt['outcome'] = status === 'SUCCEEDED' || status === 'SUCCESS'
+    ? 'Success'
+    : status === 'FAILED'
+      ? 'Failed'
+      : 'Blocked';
 
   return {
-    id: row.id as string,
+    id: (row.receipt_id as string) ?? (row.id as string),
     timestamp: row.created_at as string,
-    runId: (payload.run_id as string) ?? (row.correlation_id as string) ?? '',
+    runId: (payload.run_id as string) ?? (action.run_id as string) ?? (row.correlation_id as string) ?? '',
     correlationId: (row.correlation_id as string) ?? '',
-    actor: (payload.actor as string) ?? (row.domain as string) ?? 'System',
-    actionType: (row.action_type as string) ?? '',
-    outcome: status === 'success' ? 'Success' : status === 'failed' ? 'Failed' : 'Blocked',
-    provider: (row.provider as string) ?? 'Internal',
-    providerCallId: (payload.provider_call_id as string) ?? (row.request_id as string) ?? '',
-    redactedRequest: JSON.stringify(payload.redacted_inputs ?? payload.request ?? {}),
-    redactedResponse: JSON.stringify(payload.redacted_outputs ?? payload.response ?? {}),
-    linkedIncidentId: (payload.linked_incident_id as string) ?? null,
-    linkedApprovalId: (payload.linked_approval_id as string) ?? null,
-    linkedCustomerId: (payload.linked_customer_id as string) ?? (row.suite_id as string) ?? null,
+    actor: (payload.actor as string) ?? (action.actor as string) ?? (row.actor_id as string) ?? 'System',
+    actionType,
+    outcome,
+    provider: (row.provider as string) ?? deriveProvider(receiptType, toolUsed, action),
+    providerCallId: (payload.provider_call_id as string) ?? (action.provider_call_id as string) ?? (row.request_id as string) ?? '',
+    redactedRequest: JSON.stringify(payload.redacted_inputs ?? payload.request ?? action ?? {}),
+    redactedResponse: JSON.stringify(payload.redacted_outputs ?? payload.response ?? result ?? {}),
+    linkedIncidentId: (payload.linked_incident_id as string) ?? (action.linked_incident_id as string) ?? null,
+    linkedApprovalId: (payload.linked_approval_id as string) ?? (action.linked_approval_id as string) ?? null,
+    linkedCustomerId: (payload.linked_customer_id as string) ?? (action.linked_customer_id as string) ?? (row.suite_id as string) ?? null,
   };
 }
 
@@ -966,7 +1131,7 @@ function mapCustomerRow(row: Record<string, unknown>): Customer {
 
   return {
     id: (row.suite_id as string) ?? (row.id as string),
-    name: (row.business_name as string) ?? (row.name as string) ?? 'Unknown',
+    name: (row.business_name as string) ?? (row.name as string) ?? 'Unnamed suite',
     status: mapCustomerStatus(derivedStatus),
     plan: 'Aspire Suite',
     mrr: 0,
@@ -1075,7 +1240,7 @@ function mapSubscriptionRow(row: Record<string, unknown>): Subscription {
   return {
     id: (row.id as string) ?? '',
     customerId: (row.suite_id as string) ?? (row.id as string),
-    customerName: (row.business_name as string) ?? (row.name as string) ?? 'Unknown',
+    customerName: (row.business_name as string) ?? (row.name as string) ?? 'Unnamed suite',
     plan: (row.plan as string) ?? (metadata.plan as string) ?? 'Aspire',
     status: mapSubscriptionStatus((row.status as string) ?? 'active'),
     mrr: (row.mrr as number) ?? (metadata.mrr as number) ?? 0,
@@ -1121,7 +1286,10 @@ export async function fetchProviders(): Promise<PaginatedResult<Provider>> {
   // Aggregate call stats by provider
   const statsMap = new Map<string, { total: number; errors: number; totalMs: number; maxMs: number }>();
   for (const call of callStats ?? []) {
-    const key = call.provider as string;
+    const key = firstString(
+      (call as Record<string, unknown>).external_provider,
+      (call as Record<string, unknown>).provider,
+    ) || 'Provider not recorded';
     const existing = statsMap.get(key) ?? { total: 0, errors: 0, totalMs: 0, maxMs: 0 };
     existing.total++;
     if (call.status !== 'success') existing.errors++;
@@ -1468,7 +1636,7 @@ function mapAutomationJobRow(row: Record<string, unknown>): AutomationJob {
 
   return {
     id: row.id as string,
-    jobType: (row.action_type as string) ?? 'unknown',
+    jobType: firstString(row.action_type) || 'operation_metadata_missing',
     jobDescription: (payload.description as string) ?? (row.action_type as string) ?? '',
     tenantId: (row.suite_id as string) ?? '',
     suiteId: (row.suite_id as string) ?? '',
@@ -1657,7 +1825,9 @@ export async function fetchRunwayBurn(): Promise<RunwayBurnData> {
     .limit(2000);
 
   if (error || !events?.length) {
-    devWarn('Runway/burn data not available:', error?.message ?? 'No finance events');
+    if (error) {
+      devWarn('Runway/burn data not available:', error.message);
+    }
     return {
       monthlyBurn: 0, runway: 0, cashOnHand: 0,
       biggestCostDriver: 'No data', burnChangePercent: 0,
@@ -1795,7 +1965,7 @@ export async function fetchSkillPackRegistry(): Promise<PaginatedResult<SkillPac
   // Group by actor (from payload)
   const byActor = new Map<string, { total: number; success: number; last: string }>();
   for (const r of receipts ?? []) {
-    const actor = ((r.payload as Record<string, unknown>)?.actor as string) ?? (r.domain as string) ?? 'unknown';
+    const actor = firstString((r.payload as Record<string, unknown>)?.actor, r.domain) || 'System actor not recorded';
     const existing = byActor.get(actor) ?? { total: 0, success: 0, last: '' };
     existing.total++;
     if (r.status === 'success') existing.success++;
@@ -1838,13 +2008,13 @@ export async function fetchSkillPackAnalytics(): Promise<{
   const outcomeCounts = new Map<string, number>();
 
   for (const r of data ?? []) {
-    const actor = ((r.payload as Record<string, unknown>)?.actor as string) ?? (r.domain as string) ?? 'unknown';
+    const actor = firstString((r.payload as Record<string, unknown>)?.actor, r.domain) || 'System actor not recorded';
     const existing = byPack.get(actor) ?? { total: 0, success: 0 };
     existing.total++;
     if (r.status === 'success') existing.success++;
     byPack.set(actor, existing);
 
-    const outcome = (r.status as string) ?? 'unknown';
+    const outcome = firstString(r.status) || 'not_recorded';
     outcomeCounts.set(outcome, (outcomeCounts.get(outcome) ?? 0) + 1);
   }
 
@@ -2071,10 +2241,7 @@ function mapTrustReceiptRow(row: Record<string, unknown>): TrustReceipt {
   }
 
   // Extract action_type from JSONB action column
-  const actionType = (action.action_type as string)
-    ?? (action.tool_used as string)
-    ?? (row.receipt_type as string)
-    ?? 'unknown';
+  const actionType = deriveReceiptActionType(row);
 
   // Derive provider from action metadata or receipt_type
   const provider = (action.provider as string)
@@ -2152,7 +2319,7 @@ function mapOutboxJobRow(row: Record<string, unknown>): OutboxJob {
     finished_at: (row.finished_at as string) ?? undefined,
     attempts: (row.attempt_count as number) ?? (row.attempts as number) ?? 0,
     correlation_id: (row.trace_id as string) ?? (row.correlation_id as string) ?? (row.run_id as string) ?? '',
-    action_type: (row.action_type as string) ?? 'unknown',
+    action_type: firstString(row.action_type) || 'operation_metadata_missing',
     provider: (row.provider as string) ?? undefined,
     error_message: (row.last_error as string) ?? (row.error_message as string) ?? undefined,
   };
@@ -2196,8 +2363,8 @@ function mapProviderCallRow(row: Record<string, unknown>): ProviderCallLog {
   return {
     id: (row.call_id as string) ?? (row.id as string) ?? '',
     suite_id: (row.suite_id as string) ?? (row.tenant_id as string) ?? '',
-    provider: (row.external_provider as string) ?? (row.provider as string) ?? 'unknown',
-    action_type: (row.operation as string) ?? (row.action_type as string) ?? 'unknown',
+    provider: firstString(row.external_provider, row.provider) || 'External provider not recorded',
+    action_type: firstString(row.operation, row.action_type) || 'provider.operation_metadata_missing',
     status: status as ProviderCallLog['status'],
     started_at: startedAt ?? '',
     finished_at: completedAt ?? '',

@@ -65,7 +65,7 @@ export function WhatToDoSection({
       <div className="divide-y divide-border/50">
         {displayedActions.map((action, index) => (
           <Link
-            key={action.id}
+            key={`${action.id || 'action'}-${index}`}
             to={action.linkTo}
             className="flex items-center gap-4 p-4 hover:bg-accent/30 transition-colors group"
           >

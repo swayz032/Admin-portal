@@ -6,7 +6,7 @@
  */
 
 import { useRealtimeSubscription } from './useRealtimeSubscription';
-import { fetchReceipts, type PaginatedResult } from '@/services/apiClient';
+import { deriveReceiptActionType, fetchReceipts, type PaginatedResult } from '@/services/apiClient';
 import type { Receipt } from '@/data/seed';
 
 interface ReceiptFilters {
@@ -18,24 +18,39 @@ interface ReceiptFilters {
 }
 
 function mapReceiptRow(row: Record<string, unknown>): Receipt {
-  const payload = (row.payload as Record<string, unknown>) ?? {};
-  const status = (row.status as string) ?? 'success';
+  const action = (row.action as Record<string, unknown>) ?? {};
+  const payload = (row.payload as Record<string, unknown>) ?? action;
+  const result = (row.result as Record<string, unknown>) ?? {};
+  const rawStatus = ((row.status as string) ?? 'SUCCEEDED').toUpperCase();
+  const receiptType = (row.receipt_type as string) ?? (row.domain as string) ?? '';
+  const toolUsed = (action.tool_used as string) ?? '';
+  const actionType = deriveReceiptActionType(row);
+  const outcome: Receipt['outcome'] = rawStatus === 'SUCCEEDED' || rawStatus === 'SUCCESS'
+    ? 'Success'
+    : rawStatus === 'FAILED'
+      ? 'Failed'
+      : 'Blocked';
+  const provider = (row.provider as string)
+    ?? (action.provider as string)
+    ?? toolUsed
+    ?? receiptType
+    ?? 'Internal platform';
 
   return {
-    id: row.id as string,
+    id: (row.receipt_id as string) ?? (row.id as string),
     timestamp: row.created_at as string,
-    runId: (payload.run_id as string) ?? (row.correlation_id as string) ?? '',
+    runId: (payload.run_id as string) ?? (action.run_id as string) ?? (row.correlation_id as string) ?? '',
     correlationId: (row.correlation_id as string) ?? '',
-    actor: (payload.actor as string) ?? (row.domain as string) ?? 'System',
-    actionType: (row.action_type as string) ?? '',
-    outcome: status === 'success' ? 'Success' : status === 'failed' ? 'Failed' : 'Blocked',
-    provider: (row.provider as string) ?? 'Internal',
-    providerCallId: (payload.provider_call_id as string) ?? (row.request_id as string) ?? '',
-    redactedRequest: JSON.stringify(payload.redacted_inputs ?? payload.request ?? {}),
-    redactedResponse: JSON.stringify(payload.redacted_outputs ?? payload.response ?? {}),
-    linkedIncidentId: (payload.linked_incident_id as string) ?? null,
-    linkedApprovalId: (payload.linked_approval_id as string) ?? null,
-    linkedCustomerId: (payload.linked_customer_id as string) ?? (row.suite_id as string) ?? null,
+    actor: (payload.actor as string) ?? (action.actor as string) ?? (row.actor_id as string) ?? 'System',
+    actionType,
+    outcome,
+    provider,
+    providerCallId: (payload.provider_call_id as string) ?? (action.provider_call_id as string) ?? (row.request_id as string) ?? '',
+    redactedRequest: JSON.stringify(payload.redacted_inputs ?? payload.request ?? action ?? {}),
+    redactedResponse: JSON.stringify(payload.redacted_outputs ?? payload.response ?? result ?? {}),
+    linkedIncidentId: (payload.linked_incident_id as string) ?? (action.linked_incident_id as string) ?? null,
+    linkedApprovalId: (payload.linked_approval_id as string) ?? (action.linked_approval_id as string) ?? null,
+    linkedCustomerId: (payload.linked_customer_id as string) ?? (action.linked_customer_id as string) ?? (row.suite_id as string) ?? null,
   };
 }
 
@@ -46,7 +61,7 @@ export function useRealtimeReceipts(filters?: ReceiptFilters) {
 
   return useRealtimeSubscription<Receipt, Record<string, unknown>>({
     table: 'receipts',
-    events: ['INSERT'],
+    events: ['INSERT', 'UPDATE', 'DELETE'],
     fetcher,
     mapRow: mapReceiptRow,
     getKey: (item) => item.id,

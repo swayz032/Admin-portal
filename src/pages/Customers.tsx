@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PageHero } from '@/components/shared/PageHero';
 import { QuickStats } from '@/components/shared/QuickStats';
 import { InsightPanel } from '@/components/shared/InsightPanel';
@@ -75,6 +76,7 @@ function TagList({ items, emptyText = 'None' }: { items: string[] | undefined; e
 
 export default function Customers() {
   const { viewMode } = useSystem();
+  const navigate = useNavigate();
   const { data: customers, loading: customersLoading, error: customersError, refetch: refetchCustomers } = useRealtimeCustomers();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -299,7 +301,7 @@ export default function Customers() {
           columns={columns}
           data={filteredCustomers}
           keyExtractor={(c: Customer) => c.id}
-          onRowClick={(c) => setSelectedCustomer(c)}
+          onRowClick={(c) => navigate(`/users/${encodeURIComponent(c.id)}`)}
           emptyMessage={viewMode === 'operator' ? "No companies found." : "No suites match the current filters."}
         />
       </Panel>

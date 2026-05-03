@@ -71,7 +71,7 @@ export function PriorityActionList({ actions, onComplete, maxItems = 5 }: Priori
 
         return (
           <Link
-            key={action.id}
+            key={`${action.id || 'priority-action'}-${index}`}
             to={action.linkTo}
             className={cn(
               'group flex items-center gap-4 p-4 rounded-xl',

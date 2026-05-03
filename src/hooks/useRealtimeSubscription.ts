@@ -110,7 +110,7 @@ export function useRealtimeSubscription<T, R = Record<string, unknown>>({
       }
 
       if (payload.eventType === 'DELETE' && oldRow) {
-        const oldKey = oldRow.id as string;
+        const oldKey = (oldRow.id ?? oldRow.receipt_id ?? oldRow.call_id ?? oldRow.approval_id) as string;
         setData(prev => prev.filter(item => getKey(item) !== oldKey));
         setCount(prev => Math.max(0, prev - 1));
       }

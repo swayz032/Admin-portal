@@ -11,7 +11,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { devWarn, devLog } from '@/lib/devLog';
+import { devWarn } from '@/lib/devLog';
 
 export interface RedAlert {
   receiptId: string;
@@ -73,9 +73,6 @@ export function useRedAlertBroadcast(): UseRedAlertBroadcastResult {
       .subscribe((status) => {
         if (disposed) return;
         setIsConnected(status === 'SUBSCRIBED');
-        if (status === 'SUBSCRIBED') {
-          devLog('[RedAlerts] Connected to broadcast channel');
-        }
       });
 
     channelRef.current = channel;

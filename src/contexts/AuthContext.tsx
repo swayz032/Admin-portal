@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, us
 import { supabase } from '@/integrations/supabase/client';
 import type { Session } from '@supabase/supabase-js';
 import { devLog, devWarn, devError } from '@/lib/devLog';
-import { clearAdminToken, exchangeAdminToken } from '@/services/opsFacadeClient';
+import { clearAdminToken, exchangeAdminToken, isOpsFacadeEnabled } from '@/services/opsFacadeClient';
 
 // --- Security Constants ---
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;    // 30 minutes — auto-logout
@@ -13,6 +13,7 @@ const TAB_HIDDEN_TIMEOUT_MS = 15 * 60 * 1000;     // 15 minutes — force re-aut
 // User activity events to track
 const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'scroll', 'touchstart', 'mousemove'] as const;
 const nextTraceId = () => crypto.randomUUID();
+const AUTH_SESSION_FALLBACK_ENABLED = import.meta.env.DEV || import.meta.env.VITE_AUTH_SESSION_FALLBACK === 'true';
 
 interface AuthUser {
   id: string;
@@ -45,6 +46,26 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function stringFromMetadata(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function userFromSession(session: Session): AuthUser {
+  const metadata = session.user.user_metadata ?? {};
+  const email = session.user.email ?? '';
+  const displayName = stringFromMetadata(metadata.display_name)
+    || stringFromMetadata(metadata.full_name)
+    || stringFromMetadata(metadata.name)
+    || email.split('@')[0]
+    || 'Admin';
+
+  return {
+    id: session.user.id,
+    email,
+    displayName,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -59,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Ref for latest signOut to avoid stale closures in event listeners
   const signOutRef = useRef<() => Promise<void>>(async () => {});
+  const authSessionFallbackWarnedRef = useRef(false);
 
   // --- Clear all auth state (used on any auth error or forced logout) ---
   const clearAuthState = useCallback(() => {
@@ -69,9 +91,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearAdminToken();
   }, []);
 
+  const keepLocalSessionWithoutAdminInfo = useCallback((s: Session, traceId: string, reason: string) => {
+    if (!AUTH_SESSION_FALLBACK_ENABLED) {
+      clearAuthState();
+      return null;
+    }
+
+    const fallbackUser = userFromSession(s);
+    if (!authSessionFallbackWarnedRef.current) {
+      devWarn('auth-session unavailable; keeping local Supabase session without admin metadata:', { traceId, reason });
+      authSessionFallbackWarnedRef.current = true;
+    }
+    setSessionInfo(null);
+    setUser(fallbackUser);
+    setMfaRequired(false);
+    return null;
+  }, [clearAuthState]);
+
   // --- Fetch session info from edge function ---
-  const fetchSessionInfo = useCallback(async (accessToken: string) => {
+  const fetchSessionInfo = useCallback(async (s: Session) => {
     const traceId = nextTraceId();
+    const accessToken = s.access_token;
     try {
       const { data, error } = await supabase.functions.invoke('auth-session', {
         headers: {
@@ -80,27 +120,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
       });
       if (error || !data?.user) {
-        devWarn('auth-session error:', { traceId, error });
-        clearAuthState();
-        return null;
+        if (!AUTH_SESSION_FALLBACK_ENABLED) {
+          devWarn('auth-session error:', { traceId, error });
+        }
+        return keepLocalSessionWithoutAdminInfo(s, traceId, error?.message || 'missing auth-session user');
       }
       const info = data as SessionInfo;
       setSessionInfo(info);
       setUser(info.user);
       setMfaRequired(info.mfaEnabled && !info.mfaVerified);
-      try {
-        await exchangeAdminToken(accessToken);
-      } catch (exchangeErr) {
-        // Keep primary auth/session valid even if ops facade token exchange fails.
-        devWarn('admin token exchange failed:', { traceId, exchangeErr });
+      if (isOpsFacadeEnabled()) {
+        try {
+          await exchangeAdminToken(accessToken);
+        } catch (exchangeErr) {
+          // Keep primary auth/session valid even if ops facade token exchange fails.
+          devWarn('admin token exchange failed:', { traceId, exchangeErr });
+        }
       }
       return info;
     } catch (err) {
-      devWarn('auth-session fetch failed:', { traceId, err });
-      clearAuthState();
-      return null;
+      if (!AUTH_SESSION_FALLBACK_ENABLED) {
+        devWarn('auth-session fetch failed:', { traceId, err });
+      }
+      return keepLocalSessionWithoutAdminInfo(s, traceId, err instanceof Error ? err.message : 'auth-session request failed');
     }
-  }, [clearAuthState]);
+  }, [keepLocalSessionWithoutAdminInfo]);
 
   // --- Refresh session ---
   const refreshSession = useCallback(async () => {
@@ -108,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: { session: s } } = await supabase.auth.getSession();
       if (s?.access_token) {
         setSession(s);
-        await fetchSessionInfo(s.access_token);
+        await fetchSessionInfo(s);
       } else {
         clearAuthState();
       }
@@ -155,7 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (email: string, password: string) => {
     try {
       // Try normal sign-in first
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         // If email provider is disabled, use the admin-sign-in edge function fallback
         if (error.message.includes('Email logins are disabled')) {
@@ -206,13 +250,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       // Reset activity timestamp on successful login
       lastActivityRef.current = Date.now();
+      if (data.session?.access_token) {
+        setSession(data.session);
+        setUser(userFromSession(data.session));
+        const info = await fetchSessionInfo(data.session);
+        if (!AUTH_SESSION_FALLBACK_ENABLED && !info) {
+          return { error: { message: 'Admin session could not be verified.' } };
+        }
+      }
       return { error: null };
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred.';
       devError('signIn error:', err);
       return { error: { message: errorMessage } };
     }
-  }, []);
+  }, [fetchSessionInfo]);
 
   // --- Auth State Change Listener ---
   useEffect(() => {
@@ -223,7 +275,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // where session exists but user is still null
           setSession(s);
           setTimeout(() => {
-            fetchSessionInfo(s.access_token).catch(devWarn).finally(() => setLoading(false));
+            fetchSessionInfo(s).catch(devWarn).finally(() => setLoading(false));
           }, 0);
         } else {
           clearAuthState();
@@ -235,7 +287,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       if (s?.access_token) {
         setSession(s);
-        fetchSessionInfo(s.access_token).catch(devWarn).finally(() => setLoading(false));
+        fetchSessionInfo(s).catch(devWarn).finally(() => setLoading(false));
       } else {
         setLoading(false);
       }
@@ -278,7 +330,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!session?.access_token) return;
 
     const interval = setInterval(() => {
-      fetchSessionInfo(session.access_token).catch(() => {
+      fetchSessionInfo(session).catch(() => {
         devWarn('Session heartbeat failed. Forcing logout.');
         signOutRef.current();
       });

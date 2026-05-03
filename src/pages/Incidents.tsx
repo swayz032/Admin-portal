@@ -31,6 +31,13 @@ import { formatIncidentId } from '@/lib/premiumIds';
 import { deriveCategoryFromReceiptType } from '@/services/apiClient';
 import { CopyableId } from '@/components/shared/CopyableId';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
+import {
+  buildSourceBreakdown,
+  classifyIncident,
+  customerLabel,
+  explainIncident,
+  humanizeToken,
+} from '@/lib/storyTriage';
 import { AlertTriangle, Sparkles, CheckCircle, Shield, GitBranch, List, Layers } from 'lucide-react';
 
 // Category type for data-driven tabs
@@ -105,8 +112,8 @@ export default function Incidents() {
   // Build priority actions from open incidents
   const priorityActions: ActionItem[] = openIncidents.slice(0, 10).map(i => ({
     id: i.id,
-    title: i.summary,
-    description: `${i.severity} • ${i.customer}`,
+    title: explainIncident(i).title,
+    description: `Cause: ${explainIncident(i).cause}`,
     urgency: i.severity === 'P0' ? 'critical' as const : i.severity === 'P1' ? 'high' as const : 'medium' as const,
     linkTo: `/incidents?id=${i.id}`,
     linkLabel: 'Investigate',
@@ -120,12 +127,8 @@ export default function Incidents() {
     { label: 'resolved this week', value: resolvedIncidents.length, status: 'success' as const },
   ];
 
-  // Detection source breakdown for insight
-  const sourceBreakdown = openIncidents.reduce((acc, i) => {
-    acc[i.detectionSource] = (acc[i.detectionSource] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-  const topSource = Object.entries(sourceBreakdown).sort((a, b) => b[1] - a[1])[0];
+  const storySourceBreakdown = buildSourceBreakdown(openIncidents);
+  const topSource = storySourceBreakdown[0];
 
   const columns = viewMode === 'operator' ? [
     { key: 'id', header: 'ID', render: (i: Incident) => <CopyableId fullId={i.id} displayId={formatIncidentId(i.id)} isCopied={copiedId === i.id} onCopy={copyToClipboard} /> },
@@ -142,16 +145,19 @@ export default function Incidents() {
     },
     {
       key: 'summary',
-      header: 'What happened',
+      header: 'Story',
       className: 'max-w-xs',
       render: (i: Incident) => (
-        <div className="flex items-center gap-2">
-          <span className="truncate">{i.summary}</span>
-          {(i.occurrenceCount ?? 0) > 1 && <OccurrenceBadge count={i.occurrenceCount ?? 0} />}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-medium">{explainIncident(i).title}</span>
+            {(i.occurrenceCount ?? 0) > 1 && <OccurrenceBadge count={i.occurrenceCount ?? 0} />}
+          </div>
+          <p className="mt-1 truncate text-xs text-muted-foreground">Cause: {explainIncident(i).cause}</p>
         </div>
       ),
     },
-    { key: 'customer', header: "Who's affected" },
+    { key: 'customer', header: "Who's affected", render: (i: Incident) => customerLabel(i) },
   ] : [
     { key: 'id', header: 'ID', render: (i: Incident) => <CopyableId fullId={i.id} displayId={formatIncidentId(i.id)} isCopied={copiedId === i.id} onCopy={copyToClipboard} /> },
     { key: 'severity', header: 'Sev', render: (i: Incident) => <SeverityBadge severity={i.severity} /> },
@@ -162,8 +168,12 @@ export default function Incidents() {
     },
     {
       key: 'receiptType',
-      header: 'Type',
-      render: (i: Incident) => <span className="text-xs font-mono text-muted-foreground">{i.receiptType ?? '—'}</span>,
+      header: 'Problem Type',
+      render: (i: Incident) => (
+        <span className="text-xs text-muted-foreground">
+          {humanizeToken(i.receiptType, classifyIncident(i).sourceLabel)}
+        </span>
+      ),
     },
     {
       key: 'source',
@@ -172,17 +182,20 @@ export default function Incidents() {
     },
     {
       key: 'summary',
-      header: 'Summary',
+      header: 'Story',
       className: 'max-w-xs',
       render: (i: Incident) => (
-        <div className="flex items-center gap-2">
-          <span className="truncate">{i.summary}</span>
-          {(i.occurrenceCount ?? 0) > 1 && <OccurrenceBadge count={i.occurrenceCount ?? 0} />}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-medium">{explainIncident(i).title}</span>
+            {(i.occurrenceCount ?? 0) > 1 && <OccurrenceBadge count={i.occurrenceCount ?? 0} />}
+          </div>
+          <p className="mt-1 truncate text-xs text-muted-foreground">Cause: {explainIncident(i).cause}</p>
         </div>
       ),
     },
-    { key: 'customer', header: 'Customer' },
-    { key: 'provider', header: 'Provider' },
+    { key: 'customer', header: 'Customer', render: (i: Incident) => customerLabel(i) },
+    { key: 'provider', header: 'Provider', render: (i: Incident) => classifyIncident(i).sourceLabel },
     { key: 'updatedAt', header: 'Updated', render: (i: Incident) => <span className="text-muted-foreground">{formatTimeAgo(i.updatedAt)}</span> },
   ];
 
@@ -195,7 +208,7 @@ export default function Incidents() {
           : `${openIncidents.length} issue${openIncidents.length !== 1 ? 's' : ''} need your attention`}
         subtitle={viewMode === 'operator'
           ? "Track and resolve problems affecting your customers"
-          : `${incidents.length} total pipeline failures — ${viewType === 'all' ? 'individual events' : `${incidents.length} aggregated groups`}`}
+          : `${incidents.length} incident stories from live telemetry; ${viewType === 'all' ? 'individual events' : 'grouped by repeated cause'}`}
         icon={openIncidents.length === 0 ? <CheckCircle className="h-6 w-6" /> : <AlertTriangle className="h-6 w-6" />}
         status={openIncidents.length === 0
           ? { type: 'success', label: 'All healthy' }
@@ -225,8 +238,8 @@ export default function Incidents() {
           icon={<Shield className="h-5 w-5" />}
         />
         <InsightPanel
-          headline={topSource ? `Most issues from ${topSource[0].replace('_', ' ')}` : "No pattern detected"}
-          subtext={topSource ? `${topSource[1]} incidents this week` : "Issues are evenly distributed"}
+          headline={topSource ? `Most issues from ${topSource.label}` : "No pattern detected"}
+          subtext={topSource ? `${topSource.realIncidents + topSource.warnings} active signal${topSource.realIncidents + topSource.warnings === 1 ? '' : 's'}` : "Issues are evenly distributed"}
           trend="neutral"
           icon={<AlertTriangle className="h-5 w-5" />}
         />
@@ -334,7 +347,9 @@ export default function Incidents() {
               {viewMode === 'operator' ? "Issue Details" : "Incident Details"}
             </DialogTitle>
           </DialogHeader>
-          {selectedIncident && (
+          {selectedIncident && (() => {
+            const story = explainIncident(selectedIncident);
+            return (
             <div className="space-y-4">
               <div className="flex items-center gap-2 flex-wrap">
                 <SeverityBadge severity={selectedIncident.severity} />
@@ -348,31 +363,41 @@ export default function Incidents() {
                 {(selectedIncident.occurrenceCount ?? 0) > 1 && <OccurrenceBadge count={selectedIncident.occurrenceCount ?? 0} />}
               </div>
 
-              <div className="p-3 rounded-lg bg-muted/50 border border-border">
+              <div className="premium-mini-card p-3">
                 <p className="text-xs text-muted-foreground mb-1">What happened</p>
-                <p className="text-sm">{selectedIncident.summary}</p>
+                <p className="text-sm">{story.title}</p>
+              </div>
+
+              <div className="premium-mini-card p-3">
+                <p className="text-xs text-muted-foreground mb-1">Exact cause</p>
+                <p className="text-sm">{story.cause}</p>
+              </div>
+
+              <div className="rounded-lg border border-primary/25 bg-primary/5 p-3">
+                <p className="text-xs text-primary mb-1">Fix</p>
+                <p className="text-sm">{story.fix}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                <div className="premium-mini-card p-3">
                   <p className="text-xs text-muted-foreground mb-1">Who's affected</p>
-                  <p className="text-sm">{selectedIncident.customer}</p>
+                  <p className="text-sm">{customerLabel(selectedIncident)}</p>
                 </div>
-                <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                  <p className="text-xs text-muted-foreground mb-1">Provider</p>
-                  <p className="text-sm">{selectedIncident.provider}</p>
+                <div className="premium-mini-card p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Evidence</p>
+                  <p className="text-sm">{story.evidence}</p>
                 </div>
               </div>
 
               {selectedIncident.receiptType && (
-                <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                  <p className="text-xs text-muted-foreground mb-1">Receipt Type</p>
-                  <p className="text-sm font-mono">{selectedIncident.receiptType}</p>
+                <div className="premium-mini-card p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Problem type</p>
+                  <p className="text-sm">{humanizeToken(selectedIncident.receiptType, classifyIncident(selectedIncident).sourceLabel)}</p>
                 </div>
               )}
 
               {selectedIncident.firstSeen && selectedIncident.lastSeen && (
-                <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                <div className="premium-mini-card p-3">
                   <p className="text-xs text-muted-foreground mb-1">Time range</p>
                   <p className="text-sm">
                     {new Date(selectedIncident.firstSeen).toLocaleDateString()} - {new Date(selectedIncident.lastSeen).toLocaleDateString()}
@@ -381,7 +406,7 @@ export default function Incidents() {
               )}
 
               {selectedIncident.recommendedAction && (
-                <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <div className="rounded-lg border border-primary/25 bg-primary/5 p-3">
                   <p className="text-xs text-muted-foreground mb-1">Recommended action</p>
                   <p className="text-sm text-primary">{selectedIncident.recommendedAction}</p>
                 </div>
@@ -407,7 +432,8 @@ export default function Incidents() {
                 )}
               </div>
             </div>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -425,13 +451,15 @@ export default function Incidents() {
                 ? "Ava is analyzing this issue to help you understand what happened and what to do next."
                 : `Analyzing incident ${analysisDialog?.id} with AI assistance.`}
             </p>
-            <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+            <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
               <p className="text-sm">
-                <strong>Summary:</strong> {analysisDialog?.summary}
+                <strong>Story:</strong> {analysisDialog ? explainIncident(analysisDialog).title : ''}
               </p>
               <p className="text-sm mt-2 text-muted-foreground">
-                This appears to be a {analysisDialog?.severity} issue affecting {analysisDialog?.customer}.
-                Based on similar incidents, the recommended action is to check the {analysisDialog?.provider} integration.
+                Cause: {analysisDialog ? explainIncident(analysisDialog).cause : ''}
+              </p>
+              <p className="text-sm mt-2 text-primary">
+                Fix: {analysisDialog ? explainIncident(analysisDialog).fix : ''}
               </p>
             </div>
           </div>

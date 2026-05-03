@@ -130,11 +130,8 @@ export function StoryInsightCard({
   const content = (
     <div
       className={cn(
-        'group relative rounded-xl p-5 transition-all duration-300',
-        'bg-gradient-to-br from-card to-surface-1',
-        'border border-white/[0.06]',
-        'hover:border-white/[0.1] hover:shadow-lg hover:shadow-black/20',
-        linkTo && 'cursor-pointer hover:translate-y-[-2px]'
+        'canvas-card group relative p-5 transition-all duration-300',
+        linkTo && 'cursor-pointer hover:border-primary/50'
       )}
     >
       {/* Icon */}

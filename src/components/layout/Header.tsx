@@ -6,8 +6,8 @@ import { useSystem } from '@/contexts/SystemContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { OperatorEngineerToggle } from '@/components/shared/OperatorEngineerToggle';
 import { GlobalSearch } from '@/components/header/GlobalSearch';
+import { ScopeSelector } from '@/components/header/ScopeSelector';
 import { ErrorNotificationBadge } from '@/components/admin-ava/ErrorNotificationBadge';
-import { OnlineAdmins } from '@/components/header/OnlineAdmins';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,7 +32,7 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <header className="h-14 border-b border-border bg-background/95 backdrop-blur-sm flex items-center justify-between px-4 sticky top-0 z-40">
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 items-center gap-3">
         <Button
           variant="ghost"
           size="icon"
@@ -42,13 +42,14 @@ export function Header({ onMenuClick }: HeaderProps) {
           <Menu className="h-5 w-5" />
         </Button>
         
-        {/* Global Search */}
         <GlobalSearch />
+        <div className="hidden min-w-0 xl:block">
+          <ScopeSelector />
+        </div>
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Operator/Engineer Toggle */}
-        <div className="hidden md:block">
+        <div className="hidden lg:block">
           <OperatorEngineerToggle />
         </div>
         
@@ -59,7 +60,6 @@ export function Header({ onMenuClick }: HeaderProps) {
           </div>
         )}
         
-        {/* LLM Ops Desk Button */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="icon" className="h-9 w-9" asChild>
@@ -72,9 +72,6 @@ export function Header({ onMenuClick }: HeaderProps) {
             <p>LLM Ops Desk</p>
           </TooltipContent>
         </Tooltip>
-        
-        {/* Online Admins Presence Indicator */}
-        <OnlineAdmins />
 
         <Button variant="ghost" size="icon" className="relative h-9 w-9">
           <Bell className="h-4 w-4 text-muted-foreground" />
