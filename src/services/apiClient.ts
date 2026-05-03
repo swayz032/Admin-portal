@@ -318,9 +318,63 @@ export async function fetchIncidents(filters?: {
     }
   }
 
+  // MVEO Pass 1 — fetch direct incidents from public.incidents table.
+  // Detection layers (tool-chain integrity, anomaly cron, envelope sampler)
+  // INSERT into this table; surfacing them here means they appear in the
+  // admin portal Incidents page alongside receipt-derived incidents.
+  // RLS scopes results to the viewer's tenants (admin sees all).
+  const { data: directIncidents } = await supabase
+    .from('incidents')
+    .select('id, tenant_id, severity, source, title, description, component, fingerprint, status, tags, metadata, correlation_id, created_at, updated_at')
+    .in('status', ['open', 'investigating'])
+    .order('created_at', { ascending: false })
+    .limit(2000);
+
+  const mvIncidents: Incident[] = (directIncidents ?? []).map((row): Incident => {
+    const metadata = (row.metadata as Record<string, unknown>) ?? {};
+    const sevMap: Record<string, 'P0' | 'P1' | 'P2' | 'P3'> = {
+      critical: 'P0', high: 'P1', medium: 'P2', low: 'P3',
+    };
+    const severity = sevMap[(row.severity as string)?.toLowerCase()] ?? 'P2';
+    const sourceLabel = String(row.source ?? '').toLowerCase();
+    return {
+      id: String(row.id),
+      severity,
+      status: row.status === 'open' ? 'Open' : 'Resolved',
+      summary: String(row.title ?? 'Incident'),
+      customer: String(row.tenant_id ?? 'platform'),
+      provider: String(row.component ?? 'mveo'),
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at ?? row.created_at),
+      subscribed: false,
+      timelineReceiptIds: typeof metadata.receipt_id === 'string'
+        ? [metadata.receipt_id]
+        : [],
+      notes: [{
+        author: 'MVEO',
+        body: String(row.description ?? ''),
+        timestamp: String(row.updated_at ?? row.created_at),
+      }],
+      detectionSource: sourceLabel.includes('cron') || sourceLabel.includes('mveo')
+        ? 'rule'
+        : 'user_report',
+      customerNotified: 'no',
+      proofStatus: 'ok',
+      correlationId: row.correlation_id ? String(row.correlation_id) : undefined,
+      receiptType: String(row.source ?? 'mveo'),
+      occurrenceCount: typeof metadata.occurrence_count === 'number'
+        ? metadata.occurrence_count
+        : 1,
+      firstSeen: String(row.created_at),
+      lastSeen: String(row.updated_at ?? row.created_at),
+    };
+  });
+
   // "All Events" view: return every raw failure as its own incident
   if (filters?.view === 'all') {
     let allIncidents = (data ?? []).map((row) => mapIncidentRow(row as Record<string, unknown>));
+    // Merge MVEO direct-table incidents into the all-events stream.
+    allIncidents = [...mvIncidents, ...allIncidents];
     if (filters?.severity) {
       allIncidents = allIncidents.filter(i => i.severity === filters.severity);
     }
@@ -364,6 +418,12 @@ export async function fetchIncidents(filters?: {
     if (countDiff !== 0) return countDiff;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
+
+  // Merge MVEO direct-table incidents (one row per incident — already
+  // deduped server-side via fingerprint). They should appear at the top so
+  // critical/high MVEO alerts are visible alongside aggregated receipt
+  // groups.
+  incidents = [...mvIncidents, ...incidents];
 
   // Severity filter on aggregated results
   if (filters?.severity) {
